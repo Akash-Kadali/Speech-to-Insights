@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speech_to_insights_backend"
+version = "0.0.0"
+description = "Backend services for speech-to-insights: upload API, transcription pipeline, embeddings, indexing."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Speech To Insights Team" }
+]
+maintainers = [
+  { name = "Speech To Insights Team" }
+]
+keywords = ["speech", "whisper", "transcription", "embeddings", "sagemaker", "aws"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+
+# runtime dependencies (no pinned versions)
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "boto3",
+  "botocore",
+  "pydub",
+  "soundfile",
+  "numpy",
+  "python-dotenv",
+  "requests",
+  "typing_extensions",
+]
+
+optional-dependencies = { 
+  test = [
+    "pytest",
+    "pytest-asyncio"
+  ],
+  dev = [
+    "black",
+    "isort",
+    "flake8"
+  ]
+}
+
+[project.urls]
+homepage = "https://example.com"
+repository = "https://example.com/repo"
+documentation = "https://example.com/docs"
+
+[tool.setuptools]
+packages = ["backend"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"backend" = ["py.typed", "templates/*", "static/*"]
+
+[tool.entry_points.console_scripts]
+speech-to-insights-cli = "backend.__main__:main"
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["backend"]
+filterwarnings = [
+  "error::DeprecationWarning"
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"

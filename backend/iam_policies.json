@@ -1,0 +1,104 @@
+{
+  "lambda_policy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "S3Access",
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ],
+        "Resource": [
+          "arn:aws:s3:::YOUR_INPUT_BUCKET",
+          "arn:aws:s3:::YOUR_INPUT_BUCKET/*",
+          "arn:aws:s3:::YOUR_OUTPUT_BUCKET",
+          "arn:aws:s3:::YOUR_OUTPUT_BUCKET/*"
+        ]
+      },
+      {
+        "Sid": "CloudWatchLogs",
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ],
+        "Resource": "arn:aws:logs:*:*:*"
+      },
+      {
+        "Sid": "SageMaker",
+        "Effect": "Allow",
+        "Action": [
+          "sagemaker:CreateTransformJob",
+          "sagemaker:DescribeTransformJob",
+          "sagemaker:InvokeEndpoint",
+          "sagemaker:CreateEndpoint",
+          "sagemaker:CreateEndpointConfig",
+          "sagemaker:DescribeEndpoint",
+          "sagemaker:DescribeEndpointConfig"
+        ],
+        "Resource": "*"
+      },
+      {
+        "Sid": "StepFunctionsCallback",
+        "Effect": "Allow",
+        "Action": [
+          "states:SendTaskSuccess",
+          "states:SendTaskFailure"
+        ],
+        "Resource": "*"
+      }
+    ]
+  },
+
+  "sagemaker_transform_role_policy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "S3AccessForModel",
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::YOUR_INPUT_BUCKET",
+          "arn:aws:s3:::YOUR_INPUT_BUCKET/*",
+          "arn:aws:s3:::YOUR_OUTPUT_BUCKET",
+          "arn:aws:s3:::YOUR_OUTPUT_BUCKET/*"
+        ]
+      },
+      {
+        "Sid": "Logs",
+        "Effect": "Allow",
+        "Action": [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource": "arn:aws:logs:*:*:*"
+      }
+    ]
+  },
+
+  "api_gateway_upload_policy": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "AllowS3ObjectUploadOnly",
+        "Effect": "Allow",
+        "Action": [
+          "s3:PutObject"
+        ],
+        "Resource": [
+          "arn:aws:s3:::YOUR_INPUT_BUCKET/*"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,212 @@
+# .github/workflows/ci_workflow.yml
+#
+# CI workflow for speech_to_insights backend
+# - runs linting, unit tests, builds a deployment artifact, and optionally uploads / deploys lambdas
+# - secrets required for deploy steps:
+#     AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_ACCOUNT_ID, DEPLOY_S3_BUCKET, DEPLOY_S3_PREFIX
+#
+# Configure repository secrets and set enable_deploy=true on the workflow_dispatch input to run deployment steps.
+#
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      enable_deploy:
+        description: 'Set to "true" to run deployment steps (requires AWS secrets)'
+        required: false
+        default: 'false'
+
+env:
+  PYTHON_VERSION: '3.11'
+  PACKAGE_NAME: 'speech_to_insights_backend.zip'
+  SOURCE_DIR: 'backend'
+  S3_ARTIFACT_PREFIX: '${{ github.event.inputs.DEPLOY_S3_PREFIX || github.event.inputs.S3_PREFIX || "lambda-artifacts" }}'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  setup:
+    name: Setup and cache
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.cache-pip.outputs.cache-hit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        id: cache-pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt','**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f backend/requirements.txt ]; then
+            pip install -r backend/requirements.txt
+          else
+            pip install -r requirements.txt || true
+          fi
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dev tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff
+
+      - name: Run ruff
+        run: ruff check backend || true
+
+      - name: Run black (check)
+        run: black --check backend || true
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio numpy
+
+      - name: Run tests
+        run: |
+          pytest -q
+
+      - name: Upload test results (artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: tests-report.xml
+          if-no-files-found: ignore
+
+  build-package:
+    name: Build artifact
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    outputs:
+      artifact-path: ${{ steps.package.outputs.artifact-path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create package
+        id: package
+        run: |
+          set -e
+          PKG="${{ env.PACKAGE_NAME }}"
+          SRCDIR="${{ env.SOURCE_DIR }}"
+          rm -f "/tmp/${PKG}"
+          (cd "$SRCDIR" && zip -qry "/tmp/${PKG}" .)
+          echo "artifact-path=/tmp/${PKG}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact to workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-artifact
+          path: ${{ steps.package.outputs.artifact-path }}
+
+  deploy:
+    name: Optional deploy to AWS
+    runs-on: ubuntu-latest
+    needs: build-package
+    if: ${{ github.event.inputs.enable_deploy == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-artifact
+          path: /tmp
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload package to S3
+        id: upload_s3
+        run: |
+          ARTIFACT="/tmp/${{ env.PACKAGE_NAME }}"
+          S3_BUCKET="${{ secrets.DEPLOY_S3_BUCKET }}"
+          S3_PREFIX="${{ env.S3_ARTIFACT_PREFIX }}"
+          S3_KEY="${S3_PREFIX%/}/${{ env.PACKAGE_NAME }}"
+          aws s3 cp "$ARTIFACT" "s3://${S3_BUCKET}/${S3_KEY}"
+          echo "s3://$S3_BUCKET/$S3_KEY" > /tmp/artifact_s3_uri
+          echo "s3_key=${S3_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Lambdas using script
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          S3_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+          SOURCE_DIR: ${{ env.SOURCE_DIR }}
+          TMPDIR: /tmp
+        run: |
+          set -e
+          # Provide role ARN and other options via secrets or inputs
+          ROLE_ARN="${{ secrets.LAMBDA_ROLE_ARN }}"
+          S3_BUCKET="${{ secrets.DEPLOY_S3_BUCKET }}"
+          S3_PREFIX="${{ env.S3_ARTIFACT_PREFIX }}"
+          chmod +x backend/deploy_lambdas.sh
+          ./backend/deploy_lambdas.sh --bucket "$S3_BUCKET" --prefix "$S3_PREFIX" --role-arn "$ROLE_ARN" --source-dir "$SOURCE_DIR"
+
+      - name: Post-deploy status
+        run: echo "Deployment completed"
+
+  notify:
+    name: Notify (optional)
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always() && github.event.inputs.enable_deploy == 'true'
+    steps:
+      - name: Build status summary
+        run: echo "Build and deploy finished for ${{ github.sha }} on ${{ github.ref }}"
+
