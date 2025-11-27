@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Home</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Base design system (FIXED PATHS) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Theme (defaults to light) -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+
+<body>
+  <!-- NAVIGATION BAR -->
+  <nav>
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h1>Speech to Insights</h1>
+        <p>Turn conversations into knowledge.</p>
+      </div>
+    </div>
+
+    <ul>
+      <li><a href="index.html" class="active">Overview</a></li>
+      <li><a href="upload.html">Upload</a></li>
+      <li><a href="search.html">Search</a></li>
+      <li><a href="sessions.html">Sessions</a></li>
+      <li><a href="analytics.html">Analytics</a></li>
+      <li><a href="profile.html">Profile</a></li>
+      <li><a href="admin.html">Admin</a></li>
+      <li><a href="help.html">Help</a></li>
+      <li><a href="about.html">About</a></li>
+      <li><a href="contact.html">Contact</a></li>
+    </ul>
+
+    <div class="nav-footer">
+      <button id="theme-toggle" class="cta-secondary">Toggle Theme</button>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="page-enter">
+    <section class="hero">
+      <h2 class="gradient-text">Automatic insights from your conversations.</h2>
+      <p class="hero-subtitle">
+        Upload calls, analyze them with semantic search, and explore rich analytics.
+      </p>
+
+      <div class="hero-actions">
+        <a href="upload.html" class="cta-primary">Upload a Meeting</a>
+        <a href="search.html" class="cta-secondary">Semantic Search</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card hover-lift">
+        <h3>Smart Uploads</h3>
+        <p>
+          Upload audio or transcripts and automatically extract structure and metadata.
+        </p>
+      </article>
+
+      <article class="card hover-lift">
+        <h3>Semantic Search</h3>
+        <p>
+          Find decisions, action items, risks, owners, and topics across all sessions.
+        </p>
+      </article>
+
+      <article class="card hover-lift">
+        <h3>Analytics Dashboard</h3>
+        <p>
+          Visualize trends, keyword patterns, speaker activity, and sentiment.
+        </p>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card hover-lift">
+        <h3>Session Archive</h3>
+        <p>
+          Access previous meetings with clean transcripts, summaries, and highlights.
+        </p>
+      </article>
+
+      <article class="card hover-lift">
+        <h3>Your Profile</h3>
+        <p>
+          Manage preferences, themes, and default filters for your workspace.
+        </p>
+      </article>
+
+      <article class="card hover-lift">
+        <h3>Admin Tools</h3>
+        <p>
+          Monitor the processing queue and manage demo data for presentations.
+        </p>
+      </article>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS PATH FIXED -->
+  <script src="js/main.js"></script>
+</body>
+</html>

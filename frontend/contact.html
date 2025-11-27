@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Contact</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles ( FIXED PATHS ) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>Contact</h2>
+        <p>Reach out to us.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html" class="active">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <header class="page-header">
+        <h1 class="page-title">Contact</h1>
+        <p class="page-subtitle">
+          Have questions or want to share feedback? Feel free to reach out.
+        </p>
+      </header>
+
+      <!-- CONTACT FORM -->
+      <section class="card">
+        <h2>Send a Message</h2>
+        <p class="muted">
+          This is a demo contact form for the MSML 650 project.<br>
+          It does not send real emails but showcases UI/UX functionality.
+        </p>
+
+        <form id="contact-form">
+          <div class="field">
+            <label for="contact-name">Your name</label>
+            <input
+              type="text"
+              id="contact-name"
+              placeholder="John Doe"
+              required
+            >
+          </div>
+
+          <div class="field">
+            <label for="contact-email">Your email</label>
+            <input
+              type="email"
+              id="contact-email"
+              placeholder="you@example.com"
+              required
+            >
+          </div>
+
+          <div class="field">
+            <label for="contact-message">Message</label>
+            <textarea
+              id="contact-message"
+              placeholder="Write your message..."
+              rows="5"
+              required
+            ></textarea>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="cta-primary">Send Message</button>
+            <button type="reset" class="cta-ghost">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- CONTACT INFORMATION -->
+      <section class="card">
+        <h2>Project Contact Info</h2>
+        <ul class="list subtle">
+          <li>Email: <strong>demo@speechtoinsights.com</strong> (sample only)</li>
+          <li>Course: <strong>MSML 650 – Machine Learning Systems</strong></li>
+          <li>Developer: <strong>Karthik (Surya Vamsi Vakada)</strong></li>
+        </ul>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS PATH FIXED -->
+  <script src="js/main.js"></script>
+
+  <script>
+    // Simple demo message action
+    document.getElementById("contact-form").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const name = document.getElementById("contact-name").value;
+      showToast(`Thank you, ${name}. Message received!`);
+      this.reset();
+    });
+  </script>
+
+</body>
+</html>

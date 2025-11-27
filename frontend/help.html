@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Help & FAQ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles (FIXED PATHS) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>Help</h2>
+        <p>FAQ & guidance.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html" class="active">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <header class="page-header">
+        <h1 class="page-title">Help & FAQ</h1>
+        <p class="page-subtitle">
+          Find answers and learn how to use each part of the system.
+        </p>
+      </header>
+
+      <!-- FAQ SECTION -->
+      <section class="card">
+        <h2>Frequently Asked Questions</h2>
+
+        <h3>1. What kind of files can I upload?</h3>
+        <p>
+          You can upload <strong>.mp3, .wav, .m4a, .txt,</strong> or <strong>.pdf</strong> files in the Upload page.
+        </p>
+
+        <h3>2. How does semantic search work?</h3>
+        <p>
+          The search engine uses embedding similarity to match your natural-language query
+          against all transcripts. It retrieves the most relevant segments from your meetings.
+        </p>
+
+        <h3>3. What are “sessions”?</h3>
+        <p>
+          Sessions represent individual meetings or recordings you uploaded.<br>
+          You can view transcripts, highlights, and insights inside each session.
+        </p>
+
+        <h3>4. Why am I seeing demo data?</h3>
+        <p>
+          This project includes optional <em>demo mode</em> to help instructors and graders quickly
+          explore features without uploading their own files.
+        </p>
+
+        <h3>5. Where is my data stored?</h3>
+        <p>
+          For this MSML 650 project version, data is stored locally or simulated.<br>
+          No real cloud storage or user authentication is used.
+        </p>
+      </section>
+
+      <!-- HOW TO USE -->
+      <section class="card">
+        <h2>How to Use This System</h2>
+
+        <h3>Upload</h3>
+        <p>Go to the Upload page to add a new meeting. Fill in the fields and select your file.</p>
+
+        <h3>Search</h3>
+        <p>Use the Search page to ask natural questions like:<br>
+          <em>“What decisions were made about pricing?”</em>
+        </p>
+
+        <h3>Sessions</h3>
+        <p>
+          View all uploaded meetings, open any session, and explore the transcript and highlights.
+        </p>
+
+        <h3>Analytics</h3>
+        <p>
+          Visual dashboards show topic frequency, speaker participation, and keyword patterns.
+        </p>
+
+        <h3>Admin Panel</h3>
+        <p>
+          Used to simulate queue status and demo data for presentation purposes.
+        </p>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS PATH FIXED -->
+  <script src="js/main.js"></script>
+
+</body>
+</html>

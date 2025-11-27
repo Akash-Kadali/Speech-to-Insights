@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Sessions</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles (FIXED PATHS) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>Sessions</h2>
+        <p>Browse past meetings.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html" class="active">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONSOLE AREA -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <!-- HEADER -->
+      <header class="page-header">
+        <h1 class="page-title">All Sessions</h1>
+        <p class="page-subtitle">
+          View and filter all previously uploaded meetings.
+        </p>
+      </header>
+
+      <!-- FILTER BAR -->
+      <section class="card">
+        <div class="filters row">
+          <div class="field">
+            <label for="sessions-date-from">From</label>
+            <input type="date" id="sessions-date-from">
+          </div>
+
+          <div class="field">
+            <label for="sessions-date-to">To</label>
+            <input type="date" id="sessions-date-to">
+          </div>
+
+          <div class="field">
+            <label for="sessions-tag">Tag</label>
+            <input
+              type="text"
+              id="sessions-tag"
+              placeholder="roadmap, pricing, Q1 plan"
+            >
+          </div>
+
+          <button id="sessions-filter-btn" class="cta-secondary small-btn">
+            Apply
+          </button>
+        </div>
+      </section>
+
+      <!-- SESSION LIST TABLE -->
+      <section class="card">
+        <h2>Session List</h2>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Date</th>
+              <th>Duration</th>
+              <th>Tags</th>
+              <th></th>
+            </tr>
+          </thead>
+
+          <tbody id="sessions-table-body">
+            <!-- Filled dynamically by sessions.js -->
+          </tbody>
+        </table>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <!-- Toast -->
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS paths fixed -->
+  <script src="js/main.js"></script>
+  <script src="js/sessions.js"></script>
+
+</body>
+</html>

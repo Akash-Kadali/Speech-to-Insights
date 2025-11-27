@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | About</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles (now correctly pointing into /css) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>About</h2>
+        <p>Project details.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html" class="active">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <header class="page-header">
+        <h1 class="page-title">About This Project</h1>
+        <p class="page-subtitle">
+          A modern system that transforms speech into structured insights using NLP.
+        </p>
+      </header>
+
+      <!-- PROJECT OVERVIEW -->
+      <section class="card">
+        <h2>Project Overview</h2>
+        <p>
+          <strong>Speech to Insights</strong> is an end-to-end system built for the
+          <em>MSML 650 – Machine Learning Systems</em> course.  
+          It converts meeting audio or transcripts into searchable, analyzable insights.
+        </p>
+        <p>
+          Users can upload recordings, perform semantic search, view session transcripts,
+          and explore analytics dashboards based on topic trends and participation.
+        </p>
+      </section>
+
+      <!-- SYSTEM ARCHITECTURE -->
+      <section class="card">
+        <h2>System Architecture</h2>
+        <ul class="list subtle">
+          <li><strong>Frontend:</strong> Pure HTML/CSS/JS (no frameworks) with reusable UI components.</li>
+          <li><strong>Processing Layer:</strong> Simulated NLP pipeline for demo purposes.</li>
+          <li><strong>Search Engine:</strong> Embedding-based semantic matching (mocked for project).</li>
+          <li><strong>Visualization:</strong> Topic frequency, speaker activity, word clouds.</li>
+          <li><strong>Storage:</strong> Local storage &amp; simulated session data for grading.</li>
+        </ul>
+      </section>
+
+      <!-- MOTIVATION -->
+      <section class="card">
+        <h2>Motivation</h2>
+        <p>
+          Modern teams rely on virtual meetings, but reviewing long discussions is inefficient.
+          This project aims to:
+        </p>
+        <ul class="list subtle">
+          <li>Reduce manual note-taking.</li>
+          <li>Enable fast retrieval of decisions and action items.</li>
+          <li>Support analytics on conversation trends.</li>
+          <li>Demonstrate real-world ML system design concepts.</li>
+        </ul>
+      </section>
+
+      <!-- FEATURES -->
+      <section class="card">
+        <h2>Key Features</h2>
+        <ul class="list subtle">
+          <li><strong>Audio/Text Upload:</strong> Process meetings from multiple formats.</li>
+          <li><strong>Semantic Search:</strong> Ask natural questions and find relevant conversation snippets.</li>
+          <li><strong>Session Explorer:</strong> View transcripts, summaries, and conversation flow.</li>
+          <li><strong>Analytics Dashboard:</strong> Topic frequency, speaker participation, and keywords.</li>
+          <li><strong>Profile &amp; Theme:</strong> User personalization + light/dark theme.</li>
+          <li><strong>Admin Tools:</strong> Simulated data seeding and queue monitoring.</li>
+        </ul>
+      </section>
+
+      <!-- ABOUT THE DEVELOPER -->
+      <section class="card">
+        <h2>About the Developer</h2>
+        <p>
+          This project was created by <strong>Karthik (Surya Vamsi Vakada)</strong> as part of the
+          MSML 650 course at the University of Maryland.
+        </p>
+        <p>
+          The system focuses on UI/UX, ML pipeline simulation, and clean frontend engineering —
+          demonstrating how to design and present a full ML product workflow.
+        </p>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS path now points into /js -->
+  <script src="js/main.js"></script>
+</body>
+</html>

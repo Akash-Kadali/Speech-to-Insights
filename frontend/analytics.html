@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles (FIXED PATHS) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>Analytics</h2>
+        <p>Trends &amp; patterns.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html" class="active">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONSOLE AREA -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <!-- HEADER -->
+      <header class="page-header">
+        <h1 class="page-title">Analytics Dashboard</h1>
+        <p class="page-subtitle">
+          Explore topic trends, speaker participation, and keyword patterns across your meetings.
+        </p>
+      </header>
+
+      <!-- FILTERS -->
+      <section class="card">
+        <div class="filters row">
+          <div class="field">
+            <label for="analytics-date-from">From</label>
+            <input type="date" id="analytics-date-from">
+          </div>
+
+          <div class="field">
+            <label for="analytics-date-to">To</label>
+            <input type="date" id="analytics-date-to">
+          </div>
+
+          <div class="field">
+            <label for="analytics-tag">Tag</label>
+            <input
+              type="text"
+              id="analytics-tag"
+              placeholder="roadmap, pricing, Q1 plan"
+            >
+          </div>
+
+          <button id="analytics-refresh" class="cta-secondary small-btn">
+            Refresh
+          </button>
+        </div>
+      </section>
+
+      <!-- TOPIC FREQUENCY -->
+      <section class="card">
+        <h2>Topic Frequency</h2>
+        <p class="muted">How often key topics appear across your uploaded sessions.</p>
+        <canvas id="topic-chart"></canvas>
+      </section>
+
+      <!-- SPEAKER PARTICIPATION -->
+      <section class="card">
+        <h2>Speaker Participation</h2>
+        <p class="muted">Relative speaking time or number of turns per speaker.</p>
+        <canvas id="speaker-chart"></canvas>
+      </section>
+
+      <!-- WORD CLOUD -->
+      <section class="card">
+        <h2>Keyword Word Cloud</h2>
+        <p class="muted">Most prominent keywords extracted from your conversations.</p>
+        <div id="wordcloud" class="wordcloud">
+          <!-- Filled dynamically by analytics.js -->
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS PATHS FIXED -->
+  <script src="js/main.js"></script>
+  <script src="js/analytics.js"></script>
+</body>
+</html>

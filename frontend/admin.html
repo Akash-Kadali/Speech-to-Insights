@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles (now pointing to /css) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>Admin</h2>
+        <p>System overview.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html" class="active">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONSOLE AREA -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <!-- HEADER -->
+      <header class="page-header">
+        <h1 class="page-title">Admin Dashboard</h1>
+        <p class="page-subtitle">
+          Monitor processing status and manage demo data for this project.
+        </p>
+      </header>
+
+      <!-- PROCESSING QUEUE -->
+      <section class="card">
+        <h2>Processing Queue</h2>
+        <p class="muted">
+          Recent uploads that are currently being processed or waiting in the queue.
+        </p>
+        <ul id="queue-list" class="list subtle">
+          <!-- Filled dynamically by admin.js -->
+        </ul>
+      </section>
+
+      <!-- MAINTENANCE / DEMO CONTROLS -->
+      <section class="card">
+        <h2>Maintenance &amp; Demo Data</h2>
+        <p class="muted">
+          These controls are for demonstration only and simulate seeding or clearing data.
+        </p>
+        <div class="actions">
+          <button id="seed-demo-data" class="cta-secondary">Seed demo data</button>
+          <button id="clear-demo-data" class="cta-ghost">Clear demo data</button>
+        </div>
+      </section>
+
+      <!-- SYSTEM INFO -->
+      <section class="card">
+        <h2>System Info</h2>
+        <ul class="list subtle">
+          <li>Environment: <strong>Local / Demo</strong></li>
+          <li>Model: <strong>Offline / Precomputed outputs</strong></li>
+          <li>Course: <strong>MSML 650 – Term Project</strong></li>
+        </ul>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS now loaded from /js -->
+  <script src="js/main.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Project README</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Base styles (FIXED PATHS) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>README</h2>
+        <p>Documentation</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+      <a href="README.html" class="active">README</a>
+      <a href="credits.html">Credits</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+
+  <!-- MAIN CONTENT -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <header class="page-header">
+        <h1 class="page-title">Speech to Insights – Project README</h1>
+        <p class="page-subtitle">
+          Documentation for the MSML 650 Machine Learning Systems Term Project.
+        </p>
+      </header>
+
+      <!-- INTRODUCTION -->
+      <section class="card">
+        <h2>📌 Introduction</h2>
+        <p>
+          <strong>Speech to Insights</strong> is a frontend-driven demonstration of a real-world ML system 
+          that transforms meeting audio or transcripts into structured insights.
+        </p>
+        <p>
+          The system allows users to upload audio/text files, perform semantic search across transcripts,
+          browse past sessions, and visualize analytics such as topic frequency, speaker participation,
+          and keyword trends.
+        </p>
+        <p>
+          This project focuses on clean system design, user experience, and mock ML pipeline simulation
+          suitable for an academic environment.
+        </p>
+      </section>
+
+      <!-- GOALS -->
+      <section class="card">
+        <h2>🎯 Project Goals</h2>
+        <ul class="list subtle">
+          <li>Create an intuitive UI for uploading and processing meeting data</li>
+          <li>Provide semantic search functionality using natural language queries</li>
+          <li>Present organized transcripts with extracted highlights</li>
+          <li>Visualize conversation data with charts and word clouds</li>
+          <li>Demonstrate ML system design concepts in a simplified frontend</li>
+        </ul>
+      </section>
+
+      <!-- ARCHITECTURE -->
+      <section class="card">
+        <h2>🏗 System Architecture (Frontend Simulation)</h2>
+        <p>This project includes:</p>
+
+        <ul class="list subtle">
+          <li><strong>Upload Module</strong> – Accepts audio & text, simulates processing</li>
+          <li><strong>Semantic Search Engine</strong> – Embedding-style similarity (mocked)</li>
+          <li><strong>Session Explorer</strong> – Views transcripts & highlights</li>
+          <li><strong>Analytics Dashboard</strong> – Topic frequency, participation, word cloud</li>
+          <li><strong>Profile Page</strong> – User preferences stored locally</li>
+          <li><strong>Admin Panel</strong> – Queue status + demo data controls</li>
+        </ul>
+
+        <p>
+          The system is designed to follow the high-level structure of ML production systems
+          taught in MSML 650.
+        </p>
+      </section>
+
+      <!-- FEATURES -->
+      <section class="card">
+        <h2>✨ Key Features</h2>
+        <ul class="list subtle">
+          <li>Beautiful, consistent UI with reusable components</li>
+          <li>Light/Dark mode with theme toggle</li>
+          <li>Session list with filters and sortable data (simulated)</li>
+          <li>Semantic search with question-style queries</li>
+          <li>Interactive analytics charts (placeholder + JS hooks)</li>
+          <li>Local session caching for demonstration</li>
+        </ul>
+      </section>
+
+      <!-- TECHNOLOGIES -->
+      <section class="card">
+        <h2>🧰 Technologies Used</h2>
+        <ul class="list subtle">
+          <li><strong>HTML5</strong> – UI structure</li>
+          <li><strong>CSS (base, components, animations, app)</strong> – Custom design system</li>
+          <li><strong>JavaScript</strong> – Page logic + simulated ML behavior</li>
+          <li><strong>LocalStorage</strong> – Persistence for demo mode</li>
+        </ul>
+      </section>
+
+      <!-- HOW TO USE -->
+      <section class="card">
+        <h2>🚀 How to Run the Frontend</h2>
+        <ul class="list subtle">
+          <li>Download or clone the project folder</li>
+          <li>Open any page (e.g., <strong>index.html</strong>) in a browser</li>
+          <li>No backend is required</li>
+          <li>All interactions run client-side with simulated ML outputs</li>
+        </ul>
+      </section>
+
+      <!-- FILE STRUCTURE -->
+      <section class="card">
+        <h2>📁 Project File Structure</h2>
+
+        <p>This project follows a flat, simple structure:</p>
+        <pre class="code-block">
+index.html
+upload.html
+search.html
+sessions.html
+session-detail.html
+analytics.html
+profile.html
+admin.html
+help.html
+about.html
+contact.html
+README.html
+credits.html
+
+base.css
+components.css
+animations.css
+app.css
+style.css
+theme-light.css
+theme-dark.css
+
+main.js
+upload.js
+search.js
+sessions.js
+analytics.js
+profile.js
+admin.js
+        </pre>
+      </section>
+
+      <!-- NOTE -->
+      <section class="card">
+        <h2>📄 Academic Note</h2>
+        <p>
+          This project is intended for course demonstration only.<br>
+          No real machine learning models are executed in this frontend version.<br>
+          All outputs are simulated to represent an ML pipeline workflow.
+        </p>
+      </section>
+
+    </div>
+  </main>
+
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS PATH FIXED -->
+  <script src="js/main.js"></script>
+
+</body>
+</html>

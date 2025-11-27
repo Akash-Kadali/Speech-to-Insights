@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Speech to Insights | Search</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Core styles (FIXED PATHS) -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Theme -->
+  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">STI</div>
+      <div class="brand-text">
+        <h2>Search</h2>
+        <p>Find insights instantly.</p>
+      </div>
+    </div>
+
+    <nav class="vnav">
+      <a href="index.html">Overview</a>
+      <a href="upload.html">Upload</a>
+      <a href="search.html" class="active">Search</a>
+      <a href="sessions.html">Sessions</a>
+      <a href="analytics.html">Analytics</a>
+      <a href="profile.html">Profile</a>
+      <a href="admin.html">Admin</a>
+      <a href="help.html">Help</a>
+      <a href="about.html">About</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+  </aside>
+
+  <!-- MAIN CONSOLE AREA -->
+  <main class="console page-enter">
+    <div class="main-inner">
+
+      <!-- HEADER -->
+      <header class="page-header">
+        <h1 class="page-title">Semantic Search</h1>
+        <p class="page-subtitle">
+          Ask natural language questions to search across all your meetings and transcripts.
+        </p>
+      </header>
+
+      <!-- SEARCH FORM -->
+      <section class="card">
+        <form id="search-form">
+          <div class="field">
+            <label for="query">Search query</label>
+            <input
+              type="text"
+              id="query"
+              name="query"
+              placeholder="What did we decide about pricing?"
+              required
+            >
+          </div>
+
+          <div class="filters row">
+            <div class="field">
+              <label for="speaker-filter">Speaker</label>
+              <input
+                type="text"
+                id="speaker-filter"
+                name="speaker"
+                placeholder="(optional)"
+              >
+            </div>
+
+            <div class="field">
+              <label for="date-from">From</label>
+              <input type="date" id="date-from" name="dateFrom">
+            </div>
+
+            <div class="field">
+              <label for="date-to">To</label>
+              <input type="date" id="date-to" name="dateTo">
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="cta-primary">Search</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- SEARCH RESULTS -->
+      <section class="card">
+        <h2>Results</h2>
+        <div id="search-results" class="results-list">
+          <!-- Filled dynamically by search.js -->
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" aria-live="polite"></div>
+
+  <!-- JS paths fixed -->
+  <script src="js/main.js"></script>
+  <script src="js/search.js"></script>
+
+</body>
+</html>
