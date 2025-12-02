@@ -28,75 +28,112 @@ import base64
 import logging
 import uuid
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 
-import boto3
-from botocore.exceptions import ClientError
+# boto3 may be available in Lambda environments; import defensively
+try:
+    import boto3  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
+    _BOTO3_AVAILABLE = True
+except Exception:
+    boto3 = None  # type: ignore
+    ClientError = Exception  # fallback for except blocks
+    _BOTO3_AVAILABLE = False
 
 # Local modules (best-effort imports)
 try:
     from . import whisper as whisper_module
 except Exception:
-    whisper_module = None
+    whisper_module = None  # type: ignore
 
 try:
     from . import transcribe as transcribe_module
 except Exception:
-    transcribe_module = None
+    transcribe_module = None  # type: ignore
 
 try:
     from . import step_fn_handlers as sf_handlers
 except Exception:
-    sf_handlers = None
+    sf_handlers = None  # type: ignore
 
 try:
     from . import pii_detector as pii_detector
 except Exception:
-    pii_detector = None
+    pii_detector = None  # type: ignore
 
 logger = logging.getLogger("lambda_handlers")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
 # Configuration via env
 TRANSFORM_INPUT_BUCKET = os.getenv("TRANSFORM_INPUT_BUCKET") or os.getenv("INPUT_S3_BUCKET")
-TRANSFORM_INPUT_PREFIX = os.getenv("TRANSFORM_INPUT_PREFIX", "inputs")
+TRANSFORM_INPUT_PREFIX = os.getenv("TRANSFORM_INPUT_PREFIX", "inputs").strip("/")
 TRANSFORM_OUTPUT_BUCKET = os.getenv("TRANSFORM_OUTPUT_BUCKET") or os.getenv("OUTPUT_S3_BUCKET")
 STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN")
-MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", "5242880"))  # 5MB default
-PRESIGN_URL_EXPIRES = int(os.getenv("PRESIGN_URL_EXPIRES", "900"))  # 15 minutes
+_MAX_REALTIME_BYTES = os.getenv("MAX_REALTIME_BYTES", "5242880")
+try:
+    MAX_REALTIME_BYTES = int(_MAX_REALTIME_BYTES)
+except Exception:
+    MAX_REALTIME_BYTES = 5242880
+_PRESIGN_URL_EXPIRES = os.getenv("PRESIGN_URL_EXPIRES", "900")
+try:
+    PRESIGN_URL_EXPIRES = int(_PRESIGN_URL_EXPIRES)
+except Exception:
+    PRESIGN_URL_EXPIRES = 900
 
-# boto3 clients (module-level)
-_s3 = boto3.client("s3")
-_sfn = boto3.client("stepfunctions")
-_sts = boto3.client("sts")
+# boto3 clients (module-level lazily created)
+_s3 = None
+_sfn = None
+_sts = None
 
 
-# -----------------------
-# Helpers
-# -----------------------
+def _get_s3():
+    global _s3
+    if _s3 is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
+        _s3 = boto3.client("s3")
+    return _s3
+
+
+def _get_sfn():
+    global _sfn
+    if _sfn is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
+        _sfn = boto3.client("stepfunctions")
+    return _sfn
+
+
 def _s3_key_for_upload(filename: str, prefix: Optional[str] = None, run_id: Optional[str] = None) -> str:
     run_id = run_id or uuid.uuid4().hex
-    prefix = (prefix or TRANSFORM_INPUT_PREFIX).rstrip("/")
+    prefix = (prefix or TRANSFORM_INPUT_PREFIX or "inputs").rstrip("/")
     safe_name = filename.replace(" ", "_")
     return f"{prefix}/{run_id}/{safe_name}"
 
 
 def _upload_bytes_to_s3(data: bytes, bucket: str, key: str, content_type: Optional[str] = None) -> str:
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 required to upload to S3")
     extra_args = {"ContentType": content_type} if content_type else {}
     try:
-        _s3.put_object(Bucket=bucket, Key=key, Body=data, **(extra_args or {}))
-    except ClientError as e:
+        s3 = _get_s3()
+        s3.put_object(Bucket=bucket, Key=key, Body=data, **(extra_args or {}))
+    except ClientError:
         logger.exception("S3 put_object failed for s3://%s/%s", bucket, key)
         raise
     return f"s3://{bucket}/{key}"
 
 
 def _generate_presigned_put(bucket: str, key: str, expires_in: int = PRESIGN_URL_EXPIRES, content_type: Optional[str] = None) -> Dict[str, str]:
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 required to generate presigned URLs")
     params = {"Bucket": bucket, "Key": key}
     if content_type:
         params["ContentType"] = content_type
     try:
-        url = _s3.generate_presigned_url("put_object", Params=params, ExpiresIn=int(expires_in))
+        s3 = _get_s3()
+        url = s3.generate_presigned_url("put_object", Params=params, ExpiresIn=int(expires_in))
         return {"url": url, "s3_uri": f"s3://{bucket}/{key}"}
     except ClientError:
         logger.exception("Failed to generate presigned URL for s3://%s/%s", bucket, key)
@@ -106,55 +143,70 @@ def _generate_presigned_put(bucket: str, key: str, expires_in: int = PRESIGN_URL
 def _parse_api_event_body(event: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize API Gateway / ALB / Lambda proxy event body to a dict.
+
     Supports:
       - JSON bodies (application/json)
       - base64-encoded raw body (isBase64Encoded True)
-      - pre-parsed structures where event already contains keys (s3_bucket, s3_key, audio_base64, filename)
-    Returns a dict with keys possibly: s3_bucket, s3_key, audio_base64, audio_bytes (bytes), filename, start_workflow, presign, content_type
+      - body containing audio base64, filename, content_type, presign, start_workflow, s3_bucket/s3_key
+    Returns a dict with keys possibly: s3_bucket, s3_key, audio_base64, audio_bytes (bytes), filename, start_workflow, presign, content_type, run_id
     """
     out: Dict[str, Any] = {}
+    if not isinstance(event, dict):
+        return out
+
     # Prefer explicit fields if present
-    for k in ("s3_bucket", "s3_key", "audio_base64", "filename", "start_workflow", "presign", "content_type", "run_id"):
+    for k in ("s3_bucket", "s3_key", "audio_base64", "filename", "start_workflow", "presign", "content_type", "run_id", "metadata"):
         if k in event:
             out[k] = event[k]
 
-    # If there's a body, try to decode it
     body = event.get("body")
     if body is None:
         return out
 
-    # If API Gateway base64-encoded payload
+    # handle base64 encoded body from API Gateway
     if event.get("isBase64Encoded"):
         try:
             decoded = base64.b64decode(body)
-            # If decoded looks like JSON, parse it
+            # try parse JSON
             try:
                 parsed = json.loads(decoded.decode("utf-8"))
-                out.update(parsed if isinstance(parsed, dict) else {"raw": parsed})
+                if isinstance(parsed, dict):
+                    out.update(parsed)
+                else:
+                    out["raw"] = parsed
             except Exception:
                 # treat as raw audio bytes
                 out["audio_bytes"] = decoded
         except Exception:
-            # fall back to treating body as raw text
+            # fallback: attempt to parse body as JSON text
             try:
-                out.update(json.loads(body))
+                parsed = json.loads(body)
+                if isinstance(parsed, dict):
+                    out.update(parsed)
             except Exception:
                 out["raw"] = body
         return out
 
-    # Otherwise try to parse JSON text
-    try:
-        parsed = json.loads(body) if isinstance(body, str) else body
-        if isinstance(parsed, dict):
-            out.update(parsed)
-    except Exception:
-        # leave body as raw
+    # not base64: try parse JSON
+    if isinstance(body, str):
+        try:
+            parsed = json.loads(body)
+            if isinstance(parsed, dict):
+                out.update(parsed)
+            else:
+                out["raw"] = parsed
+        except Exception:
+            out["raw"] = body
+    elif isinstance(body, dict):
+        out.update(body)
+    else:
         out["raw"] = body
+
     return out
 
 
 def _maybe_start_workflow(s3_uri: str, run_id: str, metadata: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-    if STATE_MACHINE_ARN and sf_handlers:
+    if STATE_MACHINE_ARN and sf_handlers and getattr(sf_handlers, "start_state_machine_execution", None):
         try:
             payload = {"audio_s3_uri": s3_uri, "run_id": run_id, "metadata": metadata or {}}
             resp = sf_handlers.start_state_machine_execution(payload)
@@ -186,7 +238,7 @@ def api_upload_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
     try:
         parsed = _parse_api_event_body(event)
 
-        # 1) If s3 ref provided, just acknowledge and optionally start workflow
+        # 1) If s3 ref provided, acknowledge and optionally start workflow
         if parsed.get("s3_bucket") and parsed.get("s3_key"):
             s3_uri = f"s3://{parsed['s3_bucket'].rstrip('/')}/{parsed['s3_key'].lstrip('/')}"
             run_id = parsed.get("run_id") or uuid.uuid4().hex
@@ -195,22 +247,26 @@ def api_upload_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
                 workflow = _maybe_start_workflow(s3_uri, run_id, metadata=parsed.get("metadata"))
             return {"status": "ok", "result": {"upload_id": run_id, "s3_uri": s3_uri, "workflow": workflow}}
 
-        # 2) If presign requested, create presigned PUT URL (requires TRANSFORM_INPUT_BUCKET)
+        # 2) Presign flow
         if parsed.get("presign"):
             filename = parsed.get("filename") or f"upload-{int(time.time())}.wav"
             if not TRANSFORM_INPUT_BUCKET:
-                raise RuntimeError("TRANSFORM_INPUT_BUCKET not configured for presign")
+                return {"status": "error", "error": "TRANSFORM_INPUT_BUCKET not configured for presign"}
             run_id = parsed.get("run_id") or uuid.uuid4().hex
             key = _s3_key_for_upload(filename, prefix=TRANSFORM_INPUT_PREFIX, run_id=run_id)
             presign = _generate_presigned_put(TRANSFORM_INPUT_BUCKET, key, expires_in=PRESIGN_URL_EXPIRES, content_type=parsed.get("content_type"))
             return {"status": "presigned", "result": {"upload_id": run_id, **presign}}
 
-        # 3) If audio bytes/base64 provided, upload to S3
+        # 3) Audio payload flow
         audio_bytes = parsed.get("audio_bytes")
         if audio_bytes is None and parsed.get("audio_base64"):
-            audio_bytes = base64.b64decode(parsed["audio_base64"])
+            try:
+                audio_bytes = base64.b64decode(parsed["audio_base64"])
+            except Exception:
+                logger.exception("Failed to decode audio_base64")
+                return {"status": "error", "error": "invalid_audio_base64"}
 
-        # If API Gateway sent base64 body, _parse_api_event_body may have put bytes under audio_bytes
+        # If API Gateway base64 left raw as 'raw' and it's bytes-like, try decode
         if audio_bytes is None and parsed.get("raw") and event.get("isBase64Encoded"):
             try:
                 audio_bytes = base64.b64decode(parsed["raw"])
@@ -221,23 +277,25 @@ def api_upload_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
             return {"status": "error", "error": "no_audio_or_s3_reference_provided"}
 
         if not TRANSFORM_INPUT_BUCKET:
-            raise RuntimeError("TRANSFORM_INPUT_BUCKET not configured; cannot accept audio uploads")
+            return {"status": "error", "error": "TRANSFORM_INPUT_BUCKET not configured; cannot accept audio uploads"}
 
         filename = parsed.get("filename") or f"upload-{int(time.time())}.wav"
         run_id = parsed.get("run_id") or uuid.uuid4().hex
         key = _s3_key_for_upload(filename, prefix=TRANSFORM_INPUT_PREFIX, run_id=run_id)
         content_type = parsed.get("content_type")
-        s3_uri = _upload_bytes_to_s3(audio_bytes, TRANSFORM_INPUT_BUCKET, key, content_type=content_type)
+        try:
+            s3_uri = _upload_bytes_to_s3(audio_bytes, TRANSFORM_INPUT_BUCKET, key, content_type=content_type)
+        except Exception as exc:
+            return {"status": "error", "error": f"s3_upload_failed: {exc}"}
 
         result: Dict[str, Any] = {"upload_id": run_id, "s3_uri": s3_uri, "s3_bucket": TRANSFORM_INPUT_BUCKET, "s3_key": key}
 
-        # If small enough and whisper realtime is available, try inline realtime transcription
+        # Inline realtime transcription for small payloads if whisper realtime is available
         try:
             if len(audio_bytes) <= MAX_REALTIME_BYTES and whisper_module and getattr(whisper_module, "transcribe_bytes_realtime", None):
                 out = whisper_module.transcribe_bytes_realtime(audio_bytes)
-                text = out.get("text", "")
                 result["mode"] = "realtime"
-                result["transcript"] = text
+                result["transcript"] = out.get("text", "")
         except Exception:
             logger.exception("Inline realtime transcription failed; continuing")
 
@@ -248,7 +306,7 @@ def api_upload_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
 
         return {"status": "uploaded", "result": result}
     except Exception as exc:
-        logger.exception("api_upload_handler failed")
+        logger.exception("api_upload_handler failed: %s", exc)
         return {"status": "error", "error": str(exc)}
 
 
@@ -259,13 +317,15 @@ def s3_event_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
     """
     logger.info("s3_event_handler invoked")
     results = []
-    records = (event.get("Records") or []) if isinstance(event, dict) else []
+    records = []
+    if isinstance(event, dict):
+        records = event.get("Records") or []
     if not records:
         return {"status": "noop", "reason": "no-records"}
 
     for rec in records:
         try:
-            s3info = rec.get("s3", {})
+            s3info = rec.get("s3", {}) if isinstance(rec, dict) else {}
             bucket = s3info.get("bucket", {}).get("name")
             key = s3info.get("object", {}).get("key")
             if not bucket or not key:
@@ -280,9 +340,9 @@ def s3_event_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
                 results.append({"ok": True, "result": res})
             else:
                 results.append({"ok": False, "error": "no_transcription_module"})
-        except Exception as e:
+        except Exception:
             logger.exception("Error processing S3 record")
-            results.append({"ok": False, "error": str(e)})
+            results.append({"ok": False, "error": "processing_failed"})
 
     return {"status": "processed", "results": results}
 
@@ -326,29 +386,30 @@ def sagemaker_transform_callback(event: Dict[str, Any], context=None) -> Dict[st
     if not bucket or not prefix:
         return {"status": "error", "error": "s3_bucket and s3_prefix required"}
 
+    if not _BOTO3_AVAILABLE:
+        return {"status": "error", "error": "boto3 not available in this environment"}
+
     try:
-        resp = _s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+        s3 = _get_s3()
+        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
         keys = [c["Key"] for c in resp.get("Contents", [])] if resp.get("Contents") else []
         result = {"run_id": run_id, "s3_bucket": bucket, "s3_prefix": prefix, "keys": keys}
 
         # send task success if step fn token present
-        if task_token and sf_handlers:
+        if task_token and sf_handlers and getattr(sf_handlers, "_send_task_success", None):
             try:
-                # step_fn_handlers exposes _send_task_success internal helper; call it if present
-                send_success = getattr(sf_handlers, "_send_task_success", None)
-                if callable(send_success):
-                    send_success(task_token, result)
+                send_success = getattr(sf_handlers, "_send_task_success")
+                send_success(task_token, result)
             except Exception:
                 logger.exception("Failed to send task success to Step Functions")
 
         return {"status": "ok", "result": result}
     except Exception as exc:
         logger.exception("sagemaker_transform_callback failed")
-        if task_token and sf_handlers:
+        if task_token and sf_handlers and getattr(sf_handlers, "_send_task_failure", None):
             try:
-                send_failure = getattr(sf_handlers, "_send_task_failure", None)
-                if callable(send_failure):
-                    send_failure(task_token, error="TransformCallbackError", cause=str(exc))
+                send_failure = getattr(sf_handlers, "_send_task_failure")
+                send_failure(task_token, error="TransformCallbackError", cause=str(exc))
             except Exception:
                 logger.exception("Failed to send task failure to Step Functions")
         return {"status": "error", "error": str(exc)}
@@ -361,8 +422,9 @@ def health_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
     out = {"status": "ok", "ts": int(time.time())}
     # check S3 input bucket availability
     try:
-        if TRANSFORM_INPUT_BUCKET:
-            _s3.list_objects_v2(Bucket=TRANSFORM_INPUT_BUCKET, MaxKeys=1)
+        if TRANSFORM_INPUT_BUCKET and _BOTO3_AVAILABLE:
+            s3 = _get_s3()
+            s3.list_objects_v2(Bucket=TRANSFORM_INPUT_BUCKET, MaxKeys=1)
             out["s3_input_bucket_ok"] = True
         else:
             out["s3_input_bucket_ok"] = False

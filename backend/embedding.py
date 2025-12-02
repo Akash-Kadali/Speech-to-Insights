@@ -33,7 +33,8 @@ from typing import List, Union, Optional, Any
 import numpy as np
 
 logger = logging.getLogger("embedding")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
 # Provider selection flags (populated during import)
 _USE_ST_MODEL = False
@@ -51,7 +52,6 @@ try:
         EMBEDDING_DIM = _st_model.get_sentence_embedding_dimension()
         logger.info("Using sentence-transformers model %s (dim=%d)", _ST_MODEL_NAME, EMBEDDING_DIM)
     except Exception:
-        # If model download or init fails, disable provider and fall back.
         logger.exception("Failed to initialize sentence-transformers model; falling back")
         _USE_ST_MODEL = False
         _st_model = None  # type: ignore
@@ -66,7 +66,7 @@ try:
     _openai_key = os.getenv("OPENAI_API_KEY")
     if _openai_key:
         openai.api_key = _openai_key
-        # We'll use OpenAI only if sentence-transformers not available.
+        # We'll use OpenAI only if sentence-transformers not available (best-effort)
         _USE_OPENAI = True
         # OpenAI embedding dimension depends on model; set a default and adjust after first call.
         EMBEDDING_DIM = int(os.getenv("OPENAI_EMBED_DIM", "1536"))
@@ -90,7 +90,7 @@ def embed(text: str) -> np.ndarray:
     Embed a single text string. Returns a 1-D numpy float32 array of length EMBEDDING_DIM.
     Deterministic: same input -> same output.
     """
-    if text is None:
+    if not isinstance(text, str):
         raise TypeError("text must be a string")
     # Fast path: sentence-transformers
     if _USE_ST_MODEL and _st_model is not None:
@@ -169,17 +169,19 @@ def _fallback_embed(text: str) -> np.ndarray:
     """
     dim = int(EMBEDDING_DIM)
     buf = np.empty(dim, dtype=np.float32)
+    # guard empty string but allow it
+    text_bytes = (text or "").encode("utf-8")
     for i in range(dim):
         h = hashlib.sha256()
         # include dimension index and a small separator for clarity
-        h.update(text.encode("utf-8"))
+        h.update(text_bytes)
         h.update(b"\x00")
         h.update(str(i).encode("utf-8"))
         digest = h.digest()
         # use first 4 bytes as uint32 in big-endian
         v = int.from_bytes(digest[0:4], "big")
         # scale to [0,1)
-        f = v / 2**32
+        f = v / float(2 ** 32)
         buf[i] = float(f - 0.5)  # center around zero
     # normalize (protect against zero vector)
     norm = np.linalg.norm(buf)

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Speech to Insights | Contact</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Contact the Speech to Insights demo project — UI/UX demo form for MSML 650 term project." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Theme (swappable by JS) -->
+  <link id="theme-link" rel="stylesheet" href="/css/theme-light.css" />
+</head>
+<body>
+  <!-- Skip link for keyboard users -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">STI</div>
+      <div class="brand-text">
+        <h2>Contact</h2>
+        <p>Reach out to us.</p>
+      </div>
+    </div>
+
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html" class="active" aria-current="page">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false">
+      Toggle Theme
+    </button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner">
+      <header class="page-header">
+        <h1 id="page-title" class="page-title">Contact</h1>
+        <p class="page-subtitle">
+          Have questions or want to share feedback? Feel free to reach out.
+        </p>
+      </header>
+
+      <!-- CONTACT FORM -->
+      <section class="card" aria-labelledby="contact-form-heading">
+        <h2 id="contact-form-heading">Send a Message</h2>
+        <p class="muted">
+          This is a demo contact form for the MSML 650 project. It does not send real emails but showcases UI/UX functionality.
+        </p>
+
+        <form id="contact-form" name="contact-form" novalidate>
+          <div class="field">
+            <label for="contact-name">Your name</label>
+            <input
+              type="text"
+              id="contact-name"
+              name="contact-name"
+              placeholder="John Doe"
+              required
+              aria-required="true"
+            />
+          </div>
+
+          <div class="field">
+            <label for="contact-email">Your email</label>
+            <input
+              type="email"
+              id="contact-email"
+              name="contact-email"
+              placeholder="you@example.com"
+              required
+              aria-required="true"
+            />
+          </div>
+
+          <div class="field">
+            <label for="contact-message">Message</label>
+            <textarea
+              id="contact-message"
+              name="contact-message"
+              placeholder="Write your message..."
+              rows="5"
+              required
+              aria-required="true"
+            ></textarea>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="cta-primary">Send Message</button>
+            <button type="reset" class="cta-ghost">Clear</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- CONTACT INFORMATION -->
+      <section class="card" aria-labelledby="contact-info-heading">
+        <h2 id="contact-info-heading">Project Contact Info</h2>
+        <ul class="list subtle">
+          <li>Email: <strong>demo@speechtoinsights.com</strong> (sample only)</li>
+          <li>Course: <strong>MSML 650 – Machine Learning Systems</strong></li>
+          <li>Developer: <strong>Karthik (Surya Vamsi Vakada)</strong></li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
+  </footer>
+
+  <!-- Toast for UI feedback -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+
+  <!-- Scripts: toast.js provides a minimal toast API; main.js wires theme and other site-wide behavior -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+
+  <!-- Lightweight inline script: attach handlers safely and provide fallbacks if main.js is missing -->
+  <script>
+    (function () {
+      function safeInit() {
+        // Ensure showToast exists
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var toast = document.getElementById('toast');
+              if (!toast) { alert(message); return; }
+              toast.textContent = message;
+              toast.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+            } catch (e) {
+              console.warn('showToast fallback failed', e);
+              alert(message);
+            }
+          };
+        }
+
+        // Theme toggle fallback + restore persisted preference if any
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink) {
+          if (!themeToggle.__fallbackAttached) {
+            themeToggle.addEventListener('click', function () {
+              try {
+                var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+                var isDark = href.indexOf('dark') !== -1;
+                var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+                themeLink.setAttribute('href', next);
+                themeToggle.setAttribute('aria-pressed', String(!isDark));
+                try { localStorage.setItem('sti-theme', next); } catch (e) {}
+              } catch (e) {
+                console.warn('Theme toggle fallback error', e);
+              }
+            });
+            themeToggle.__fallbackAttached = true;
+          }
+
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+        }
+
+        // Contact form handler (defensive)
+        var form = document.getElementById('contact-form');
+        if (form && !form.__handled) {
+          form.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            var name = (document.getElementById('contact-name') || {}).value || '';
+            var email = (document.getElementById('contact-email') || {}).value || '';
+            var message = (document.getElementById('contact-message') || {}).value || '';
+
+            if (!name.trim() || !email.trim() || !message.trim()) {
+              window.showToast('Please fill in all required fields.', 2500);
+              return;
+            }
+
+            // Demo behavior: show toast and reset form (no backend call)
+            window.showToast('Thank you, ' + name + '. Message received!', 3000);
+            try { form.reset(); } catch (err) { console.warn('form.reset failed', err); }
+          });
+
+          form.__handled = true;
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. The contact form requires JavaScript to function.
+    </div>
+  </noscript>
+</body>
+</html>

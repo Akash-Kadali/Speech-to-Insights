@@ -22,16 +22,16 @@ from __future__ import annotations
 
 import os
 import json
-import math
 import uuid
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Iterable
+from typing import List, Dict, Any, Optional, Tuple
 
 import numpy as np
 
 logger = logging.getLogger("indexer")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
 # attempt to import embedding module (required)
 try:
@@ -92,14 +92,19 @@ class VectorIndex:
         # discover embedding functions
         self._embed_single = None
         self._embed_batch = None
+
+        # try common names for batch embedding functions
         for name in ("embed_batch", "generate_embeddings", "get_embeddings", "create_embeddings"):
             if hasattr(embedding_module, name):
                 self._embed_batch = getattr(embedding_module, name)
                 break
+
+        # try common names for single embedding functions
         for name in ("embed", "generate_embedding", "get_embedding", "create_embedding"):
             if hasattr(embedding_module, name):
                 self._embed_single = getattr(embedding_module, name)
                 break
+
         # If no batch but single exists, wrap single
         if self._embed_batch is None and self._embed_single is not None:
             def _wrap_batch(texts: List[str]):
@@ -115,6 +120,7 @@ class VectorIndex:
         self.vectors: Optional[np.ndarray] = None  # (n, dim) float32 for numpy backend
         self.faiss_index = None
         self.index_path = Path(index_path) if index_path is not None else None
+        # decide whether to use faiss
         self.use_faiss = bool(use_faiss) and _faiss_available
         if use_faiss and not _faiss_available:
             logger.warning("Faiss requested but not available. Falling back to numpy backend.")
@@ -127,9 +133,14 @@ class VectorIndex:
         self.dim = int(dim)
         self.vectors = np.zeros((0, self.dim), dtype=np.float32)
         if self.use_faiss:
-            # we will use inner product on normalized vectors to emulate cosine
-            self.faiss_index = faiss.IndexFlatIP(self.dim)
-            logger.debug("Initialized faiss IndexFlatIP dim=%d", self.dim)
+            # use inner product on normalized vectors to emulate cosine similarity
+            try:
+                self.faiss_index = faiss.IndexFlatIP(self.dim)
+                logger.debug("Initialized faiss IndexFlatIP dim=%d", self.dim)
+            except Exception:
+                logger.exception("Failed to initialize faiss index; disabling faiss")
+                self.use_faiss = False
+                self.faiss_index = None
 
     def _add_vectors_inmemory(self, vecs: np.ndarray) -> None:
         if self.vectors is None:
@@ -174,7 +185,7 @@ class VectorIndex:
 
         for i, txt in enumerate(texts):
             if chunking and len(txt) > chunking:
-                step = int(chunking * 0.8)
+                step = max(1, int(chunking * 0.8))
                 start = 0
                 chunk_idx = 0
                 while start < len(txt):
@@ -210,6 +221,11 @@ class VectorIndex:
         # add to backend
         if self.use_faiss:
             self._add_vectors_faiss(vecs)
+            # keep a numpy copy for persistence if needed
+            if self.vectors is None:
+                self.vectors = vecs.astype(np.float32)
+            else:
+                self.vectors = np.vstack([self.vectors, vecs.astype(np.float32)])
         else:
             self._add_vectors_inmemory(vecs)
 
@@ -249,6 +265,7 @@ class VectorIndex:
                 logger.exception("Failed to save faiss index; falling back to numpy array")
                 if self.vectors is not None:
                     np.save(str(npy_path), self.vectors)
+                    logger.info("Saved numpy vectors to %s", npy_path)
         else:
             if self.vectors is not None:
                 np.save(str(npy_path), self.vectors)
@@ -286,8 +303,13 @@ class VectorIndex:
         if prefer_faiss:
             try:
                 vi.faiss_index = faiss.read_index(str(faiss_path))
-                vi.dim = vi.faiss_index.d
-                logger.info("Loaded faiss index from %s (dim=%d)", faiss_path, vi.dim)
+                # faiss IndexFlatIP has attribute d for dimension in many builds
+                try:
+                    vi.dim = int(vi.faiss_index.d)
+                except Exception:
+                    # fallback: infer from stored numpy vectors if present
+                    vi.dim = None
+                logger.info("Loaded faiss index from %s (dim=%s)", faiss_path, vi.dim)
                 return vi
             except Exception:
                 logger.exception("Failed to load faiss index; will try numpy")
@@ -322,8 +344,8 @@ class VectorIndex:
             qvec = qvec.reshape(-1)
 
         if self.dim is None:
-            # bootstrapping: set dim from query
-            self.dim = qvec.shape[0]
+            # bootstrap dim from query
+            self.dim = int(qvec.shape[0])
             if not self.use_faiss and self.vectors is None:
                 self.vectors = np.zeros((0, self.dim), dtype=np.float32)
 
@@ -337,13 +359,22 @@ class VectorIndex:
             qn = np.linalg.norm(qvec)
             qn = 1e-12 if qn == 0 else qn
             qnorm = (qvec / qn).astype(np.float32)
-            D, I = self.faiss_index.search(np.expand_dims(qnorm, axis=0), k)
-            idxs = I[0].tolist()
-            scores = D[0].tolist()
-            for idx, sc in zip(idxs, scores):
-                if idx < 0 or idx >= len(self.ids):
-                    continue
-                results.append((int(idx), float(sc)))
+            try:
+                D, I = self.faiss_index.search(np.expand_dims(qnorm, axis=0), k)
+                idxs = I[0].tolist()
+                scores = D[0].tolist()
+                for idx, sc in zip(idxs, scores):
+                    if idx < 0 or idx >= len(self.ids):
+                        continue
+                    results.append((int(idx), float(sc)))
+            except Exception:
+                logger.exception("Faiss search failed; falling back to numpy scan")
+                # fallback to numpy below
+                if self.vectors is not None and self.vectors.shape[0] > 0:
+                    sims = _cosine_sim_matrix(qvec, self.vectors)
+                    top_idx = np.argsort(-sims)[:k]
+                    for idx in top_idx.tolist():
+                        results.append((int(idx), float(sims[idx])))
         else:
             if self.vectors is None or self.vectors.shape[0] == 0:
                 return []

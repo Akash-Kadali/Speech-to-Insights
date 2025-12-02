@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Speech to Insights | Help &amp; FAQ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Help and FAQ for the Speech to Insights demo project — upload, search, sessions, analytics, and admin guidance." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Theme (swappable via JS) -->
+  <link id="theme-link" rel="stylesheet" href="/css/theme-light.css" />
+</head>
+<body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">STI</div>
+      <div class="brand-text">
+        <h2>Help</h2>
+        <p>FAQ &amp; guidance.</p>
+      </div>
+    </div>
+
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html" class="active" aria-current="page">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false">
+      Toggle Theme
+    </button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="help-title">
+    <div class="main-inner">
+      <header class="page-header">
+        <h1 id="help-title" class="page-title">Help &amp; FAQ</h1>
+        <p class="page-subtitle">Find answers and learn how to use each part of the system.</p>
+      </header>
+
+      <!-- FAQ SECTION -->
+      <section class="card" aria-labelledby="faq-heading">
+        <h2 id="faq-heading">Frequently Asked Questions</h2>
+
+        <dl class="faq-list">
+          <dt id="q1">1. What kind of files can I upload?</dt>
+          <dd>
+            You can upload <strong>.mp3, .wav, .m4a, .txt</strong>, or <strong>.pdf</strong> files via the Upload page.
+          </dd>
+
+          <dt id="q2">2. How does semantic search work?</dt>
+          <dd>
+            The search engine uses embedding similarity to match your natural-language query against transcripts.
+            It retrieves the most relevant segments from your meetings.
+          </dd>
+
+          <dt id="q3">3. What are “sessions”?</dt>
+          <dd>
+            Sessions represent individual meetings or recordings you uploaded.
+            Open any session to view transcripts, highlights, and insights.
+          </dd>
+
+          <dt id="q4">4. Why am I seeing demo data?</dt>
+          <dd>
+            This project includes an optional <em>demo mode</em> so instructors and graders can explore features
+            without uploading files.
+          </dd>
+
+          <dt id="q5">5. Where is my data stored?</dt>
+          <dd>
+            For this MSML 650 demo, data is stored locally or simulated. This version does not use cloud storage
+            or user authentication.
+          </dd>
+        </dl>
+      </section>
+
+      <!-- HOW TO USE -->
+      <section class="card" aria-labelledby="howto-heading">
+        <h2 id="howto-heading">How to Use This System</h2>
+
+        <div class="howto">
+          <article aria-labelledby="upload">
+            <h3 id="upload">Upload</h3>
+            <p>Go to Upload to add a meeting. Fill the fields, pick a file, and submit. Demo mode seeds sample entries for testing.</p>
+          </article>
+
+          <article aria-labelledby="search">
+            <h3 id="search">Search</h3>
+            <p>Ask natural questions like <em>“What decisions were made about pricing?”</em> Results show matching transcript snippets with context.</p>
+          </article>
+
+          <article aria-labelledby="sessions">
+            <h3 id="sessions">Sessions</h3>
+            <p>View uploaded meetings, open a session to read the transcript, see highlights, and exported summaries.</p>
+          </article>
+
+          <article aria-labelledby="analytics">
+            <h3 id="analytics">Analytics</h3>
+            <p>Dashboards include topic frequency, speaker participation, and keyword patterns across sessions.</p>
+          </article>
+
+          <article aria-labelledby="admin">
+            <h3 id="admin">Admin Panel</h3>
+            <p>Admin simulates queue status and demo data for presentations. It's a UI demo, not a production control panel.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- CONTACT SUPPORT -->
+      <section class="card" aria-labelledby="support-heading">
+        <h2 id="support-heading">Still need help?</h2>
+        <p class="muted">If the documentation doesn't answer your question, visit the Contact page to send a message.</p>
+      </section>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
+  </footer>
+
+  <!-- Toast (UI feedback) -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+
+  <!-- Scripts (deferred so DOM is available) -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+
+  <!-- Defensive inline script: fallbacks so missing main.js won't break page -->
+  <script>
+    (function () {
+      function safeInit() {
+        // Minimal showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var toast = document.getElementById('toast');
+              if (!toast) { alert(message); return; }
+              toast.textContent = message;
+              toast.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+            } catch (e) {
+              console.warn('showToast fallback failed', e);
+              alert(message);
+            }
+          };
+        }
+
+        // Theme toggle fallback + restore persisted preference
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink) {
+          if (!themeToggle.__fallbackAttached) {
+            themeToggle.addEventListener('click', function () {
+              try {
+                var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+                var isDark = href.indexOf('dark') !== -1;
+                var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+                themeLink.setAttribute('href', next);
+                themeToggle.setAttribute('aria-pressed', String(!isDark));
+                try { localStorage.setItem('sti-theme', next); } catch (e) {}
+              } catch (e) {
+                console.warn('Theme toggle fallback error', e);
+              }
+            });
+            themeToggle.__fallbackAttached = true;
+          }
+
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Some features (search, analytics, uploads) require JavaScript.
+    </div>
+  </noscript>
+</body>
+</html>

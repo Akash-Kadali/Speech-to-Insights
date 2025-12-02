@@ -30,11 +30,22 @@ import time
 import uuid
 from typing import Optional, Dict, Tuple
 
-import boto3
-from botocore.exceptions import ClientError
+# boto3 import defensively for test environments that might not have AWS SDK
+try:
+    import boto3  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
+    _BOTO3_AVAILABLE = True
+except Exception:
+    boto3 = None  # type: ignore
+    ClientError = Exception
+    _BOTO3_AVAILABLE = False
 
 logger = logging.getLogger("whisper")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(ch)
 
 # --- Lazy boto clients (module-level cached) --------------------------------
 _sagemaker_runtime = None
@@ -45,6 +56,8 @@ _s3 = None
 def boto_client(name: str, **kwargs):
     """Return cached boto3 client for given service name."""
     global _sagemaker_runtime, _sagemaker, _s3
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 is not available in this environment")
     if name == "sagemaker-runtime":
         if _sagemaker_runtime is None:
             _sagemaker_runtime = boto3.client("sagemaker-runtime", **kwargs)
@@ -66,11 +79,16 @@ SAGEMAKER_TRANSFORM_ROLE = os.getenv("SAGEMAKER_TRANSFORM_ROLE")
 SAGEMAKER_MODEL_NAME = os.getenv("SAGEMAKER_MODEL_NAME", "whisper-model")
 TRANSFORM_OUTPUT_BUCKET = os.getenv("TRANSFORM_OUTPUT_BUCKET")  # e.g., "s3://my-bucket/path-prefix" or "my-bucket/path-prefix"
 SAGEMAKER_TRANSFORM_INSTANCE_TYPE = os.getenv("SAGEMAKER_TRANSFORM_INSTANCE_TYPE", "ml.g4dn.xlarge")
-MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", 5 * 1024 * 1024))  # 5 MB default
+# default as int; handle env which will be string
+try:
+    MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", str(5 * 1024 * 1024)))
+except Exception:
+    MAX_REALTIME_BYTES = 5 * 1024 * 1024  # fallback 5MB
 
 # --- Utilities --------------------------------------------------------------
 EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 PHONE_RE = re.compile(r"(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}")
+
 
 def redact_pii(text: str) -> str:
     """
@@ -109,13 +127,13 @@ def _ensure_transform_output_uri(uri: str) -> str:
     """
     if not uri:
         raise RuntimeError("TRANSFORM_OUTPUT_BUCKET is not configured")
+    uri = uri.rstrip("/")
     if uri.startswith("s3://"):
-        return uri.rstrip("/")
-    # allow 'bucket/prefix' format
+        return uri
+    # allow 'bucket/prefix' or 'bucket'
     if "/" in uri:
-        return f"s3://{uri.rstrip('/')}"
-    # allow bare bucket name
-    return f"s3://{uri.rstrip('/')}"
+        return f"s3://{uri}"
+    return f"s3://{uri}"
 
 
 # ------------------------- S3 helpers ---------------------------------------
@@ -152,6 +170,8 @@ def transcribe_bytes_realtime(audio_bytes: bytes, content_type: str = "audio/wav
     """
     if not SAGEMAKER_ENDPOINT:
         raise RuntimeError("SAGEMAKER_ENDPOINT is not configured for realtime inference")
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 is required for realtime inference")
 
     runtime = boto_client("sagemaker-runtime")
     logger.debug("Invoking realtime endpoint %s (content_type=%s, bytes=%d)", SAGEMAKER_ENDPOINT, content_type, len(audio_bytes))
@@ -181,6 +201,8 @@ def start_sagemaker_transform(s3_input_uri: str, output_s3_uri: str, job_name: O
     Start a SageMaker Batch Transform job. The model container should accept S3Prefix inputs
     and write outputs under the given S3OutputPath.
     """
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 is required to start SageMaker transform jobs")
     if not SAGEMAKER_TRANSFORM_ROLE:
         raise RuntimeError("SAGEMAKER_TRANSFORM_ROLE is not configured for transform jobs")
 
@@ -219,6 +241,8 @@ def wait_for_transform(job_name: str, poll_interval: int = 10, timeout_seconds: 
     """
     Polls SageMaker transform job status until terminal state. Returns final describe_transform_job dict.
     """
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 is required to poll SageMaker transform jobs")
     sm = boto_client("sagemaker")
     start = time.time()
     while True:
@@ -245,7 +269,11 @@ def process_s3_event_and_transcribe(record: Dict, use_realtime_threshold: Option
         raise ValueError("Invalid S3 event record structure; expected record['s3']['bucket']['name'] and ['object']['key']")
 
     # Prefer the explicit object size if provided
-    size = record["s3"]["object"].get("size", None) if "object" in record.get("s3", {}) else None
+    size = None
+    try:
+        size = int(record["s3"]["object"].get("size")) if "object" in record.get("s3", {}) and record["s3"]["object"].get("size") is not None else None
+    except Exception:
+        size = None
 
     logger.info("Processing S3 object s3://%s/%s (size=%s)", bucket, key, size)
     audio_bytes = download_s3_to_bytes(bucket, key)
@@ -268,7 +296,6 @@ def process_s3_event_and_transcribe(record: Dict, use_realtime_threshold: Option
         return result
 
     # Batch transform path
-    # Ensure configured output path
     output_uri = _ensure_transform_output_uri(TRANSFORM_OUTPUT_BUCKET)
     s3_input = f"s3://{bucket}/{key}"
     logger.info("Choosing batch transform path for %s -> output %s", s3_input, output_uri)
@@ -295,7 +322,7 @@ def lambda_handler(event, context):
     results = []
 
     # S3 event records
-    if isinstance(event, dict) and event.get("Records") and event["Records"][0].get("s3"):
+    if isinstance(event, dict) and event.get("Records") and isinstance(event["Records"], list) and event["Records"][0].get("s3"):
         logger.info("Detected S3 event with %d records", len(event["Records"]))
         for rec in event["Records"]:
             try:
@@ -337,6 +364,7 @@ def lambda_handler(event, context):
 # ------------------------- CLI for local testing ----------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Local test runner for whisper.py")
     parser.add_argument("--s3", help="S3 URI (s3://bucket/key) to process")
     parser.add_argument("--file", help="Local audio file to process")
@@ -354,8 +382,9 @@ if __name__ == "__main__":
             print(json.dumps(out, indent=2))
         else:
             # Upload to temporary s3 then start transform
+            if not _BOTO3_AVAILABLE:
+                raise RuntimeError("boto3 is required to run transform locally")
             s3 = boto_client("s3")
-            tmp_key = f"local-tests/{uuid.uuid4().hex}/{os.path.basename(args.file)}"
             output_uri = _ensure_transform_output_uri(TRANSFORM_OUTPUT_BUCKET)
             tmp_bucket, _ = parse_s3_uri(output_uri)
             uploads_prefix = f"local-tests-input/{uuid.uuid4().hex}/"

@@ -27,15 +27,23 @@ import logging
 import time
 import uuid
 import gzip
-from typing import Dict, Optional, Any, List, Iterable
+from typing import Dict, Optional, Any, List
 from io import BytesIO
 
-import boto3
-from botocore.exceptions import ClientError
+# boto3 imported defensively; some test environments lack it
+try:
+    import boto3  # type: ignore
+    from botocore.exceptions import ClientError, BotoCoreError  # type: ignore
+    _BOTO3_AVAILABLE = True
+except Exception:
+    boto3 = None  # type: ignore
+    ClientError = Exception
+    BotoCoreError = Exception
+    _BOTO3_AVAILABLE = False
 
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logger = logging.getLogger("stepfn")
-logger.setLevel(LOG_LEVEL)
+logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
 
 # boto3 clients (lazily created)
 _sfn = None
@@ -46,24 +54,32 @@ _sns = None
 def sfn_client():
     global _sfn
     if _sfn is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
         _sfn = boto3.client("stepfunctions")
     return _sfn
 
 def s3_client():
     global _s3
     if _s3 is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
         _s3 = boto3.client("s3")
     return _s3
 
 def sagemaker_client():
     global _sm
     if _sm is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
         _sm = boto3.client("sagemaker")
     return _sm
 
 def sns_client():
     global _sns
     if _sns is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
         _sns = boto3.client("sns")
     return _sns
 
@@ -90,12 +106,12 @@ def _send_task_success(task_token: Optional[str], output: Any) -> None:
     if not task_token:
         logger.debug("No task token provided; skipping send_task_success")
         return
-    sfn = sfn_client()
     try:
+        sfn = sfn_client()
         payload = _safe_serialize(output)
         sfn.send_task_success(taskToken=task_token, output=payload)
         logger.info("Sent task success for token")
-    except ClientError as e:
+    except Exception as e:
         logger.exception("Failed to send task success: %s", e)
         raise
 
@@ -103,11 +119,11 @@ def _send_task_failure(task_token: Optional[str], error: str, cause: Optional[st
     if not task_token:
         logger.debug("No task token provided; skipping send_task_failure")
         return
-    sfn = sfn_client()
     try:
+        sfn = sfn_client()
         sfn.send_task_failure(taskToken=task_token, error=error, cause=str(cause or ""))
         logger.info("Sent task failure for token: %s", error)
-    except ClientError as e:
+    except Exception as e:
         logger.exception("Failed to send task failure: %s", e)
         raise
 
@@ -115,26 +131,30 @@ def _notify_via_sns(subject: str, message: Any) -> None:
     if not NOTIFY_SNS_TOPIC_ARN:
         logger.debug("No SNS topic configured; skipping notify")
         return
+    if not _BOTO3_AVAILABLE:
+        logger.debug("boto3 not available; cannot publish SNS message")
+        return
     try:
         sns = sns_client()
         sns.publish(TopicArn=NOTIFY_SNS_TOPIC_ARN, Subject=subject[:100], Message=_safe_serialize(message))
         logger.info("Published notification to SNS %s", NOTIFY_SNS_TOPIC_ARN)
-    except ClientError:
+    except Exception:
         logger.exception("Failed to publish SNS notification; continuing")
-
 
 # ---------------------------------------------------------------------------
 # Utilities: S3 helpers for storing manifests / results (improved)
 # ---------------------------------------------------------------------------
 
 def _s3_put_json(bucket: str, key: str, obj: Any) -> str:
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 is not available in this environment")
     s3 = s3_client()
     body = json.dumps(obj, default=str).encode("utf-8")
     logger.debug("Uploading JSON to s3://%s/%s (bytes=%d)", bucket, key, len(body))
     try:
         s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/json")
-    except ClientError:
-        logger.exception("Failed to upload JSON to S3")
+    except ClientError as e:
+        logger.exception("Failed to upload JSON to S3: %s", e)
         raise
     return f"s3://{bucket}/{key}"
 
@@ -146,17 +166,19 @@ def _write_result_to_s3(result_obj: Dict, run_id: Optional[str] = None) -> str:
     return _s3_put_json(OUTPUT_S3_BUCKET, key, result_obj)
 
 def _read_s3_object_bytes(bucket: str, key: str) -> bytes:
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 is not available in this environment")
     s3 = s3_client()
     try:
         resp = s3.get_object(Bucket=bucket, Key=key)
         return resp["Body"].read()
-    except ClientError:
-        logger.exception("Failed to read s3://%s/%s", bucket, key)
+    except ClientError as e:
+        logger.exception("Failed to read s3://%s/%s: %s", bucket, key, e)
         raise
 
 def _parse_possible_json_or_text(raw: bytes) -> Any:
     """
-    Try to parse JSON, then JSONL (first line), then gzipped JSONL, then fallback to text.
+    Try to parse JSON, then JSONL (first line), then gzipped JSON/JSONL, then fallback to text.
     """
     if not raw:
         return None
@@ -192,7 +214,6 @@ def _parse_possible_json_or_text(raw: bytes) -> Any:
     except Exception:
         return str(raw)
 
-
 # ---------------------------------------------------------------------------
 # Helper: start state machine execution (callable from HTTP endpoint)
 # ---------------------------------------------------------------------------
@@ -203,22 +224,25 @@ def start_state_machine_execution(input_obj: Dict, name: Optional[str] = None, t
     """
     if not STATE_MACHINE_ARN:
         raise RuntimeError("STATE_MACHINE_ARN not configured")
+    try:
+        sfn = sfn_client()
+    except Exception:
+        raise RuntimeError("Failed to create Step Functions client")
 
-    sfn = sfn_client()
     name = name or f"speech-run-{int(time.time())}-{uuid.uuid4().hex[:6]}"
     logger.info("Starting state machine %s with name %s", STATE_MACHINE_ARN, name)
     try:
         kwargs = {"stateMachineArn": STATE_MACHINE_ARN, "name": name, "input": json.dumps(input_obj)}
-        # tags supported by StartExecution as of recent APIs; include if provided
         if tags:
             kwargs["tags"] = tags
         resp = sfn.start_execution(**kwargs)
         logger.debug("start_execution resp: %s", resp)
-        return {"executionArn": resp["executionArn"], "startDate": resp.get("startDate").isoformat()}
-    except ClientError:
-        logger.exception("Failed to start state machine execution")
+        start_date = resp.get("startDate")
+        start_date_iso = start_date.isoformat() if hasattr(start_date, "isoformat") else str(start_date)
+        return {"executionArn": resp.get("executionArn"), "startDate": start_date_iso}
+    except ClientError as e:
+        logger.exception("Failed to start state machine execution: %s", e)
         raise
-
 
 # ---------------------------------------------------------------------------
 # Lambda Task Handlers
@@ -228,7 +252,7 @@ def start_transcription(event: Dict, context=None) -> Dict:
     """
     Validate/normalize input and return an S3 input location for downstream tasks.
     """
-    logger.info("start_transcription invoked with keys: %s", list(event.keys()))
+    logger.info("start_transcription invoked with keys: %s", list(event.keys()) if isinstance(event, dict) else str(type(event)))
     task_token = event.get("taskToken")
     try:
         # Resolve s3 uri
@@ -258,15 +282,21 @@ def start_transcription(event: Dict, context=None) -> Dict:
             logger.exception("Failed to persist manifest to S3; continuing")
 
         # If callback pattern: send success back immediately with payload
-        _send_task_success(task_token, output_obj)
+        try:
+            _send_task_success(task_token, output_obj)
+        except Exception:
+            logger.exception("send_task_success failed; continuing")
+
         # Also optionally notify via SNS
         _notify_via_sns("start_transcription", {"run_id": run_id, "s3_input": s3_input})
         return output_obj
     except Exception as e:
         logger.exception("start_transcription failed: %s", e)
-        _send_task_failure(task_token, error="StartTranscriptionError", cause=str(e))
+        try:
+            _send_task_failure(task_token, error="StartTranscriptionError", cause=str(e))
+        except Exception:
+            logger.exception("Failed to send task failure")
         raise
-
 
 def wait_for_transform_callback(event: Dict, context=None) -> Dict:
     """
@@ -290,8 +320,15 @@ def wait_for_transform_callback(event: Dict, context=None) -> Dict:
     if not expected_s3_prefix and not expected_transform_job_name:
         raise ValueError("Either expected_s3_prefix or expected_sagemaker_transform_job_name is required")
 
-    s3 = s3_client()
-    sm = sagemaker_client()
+    # Clients (may raise if boto3 not available)
+    try:
+        s3 = s3_client()
+    except Exception:
+        s3 = None
+    try:
+        sm = sagemaker_client()
+    except Exception:
+        sm = None
 
     start_time = time.time()
     attempt = 0
@@ -308,18 +345,13 @@ def wait_for_transform_callback(event: Dict, context=None) -> Dict:
                 return {"ok": False, "reason": "timeout"}
 
             # If waiting on SageMaker transform job status
-            if expected_transform_job_name:
+            if expected_transform_job_name and sm is not None:
                 try:
                     resp = sm.describe_transform_job(TransformJobName=expected_transform_job_name)
                     status = resp.get("TransformJobStatus")
                     logger.info("Transform job %s status=%s", expected_transform_job_name, status)
                     if status == "Completed":
-                        # Optionally list outputs if transform wrote to S3 and location is provided in resp
-                        s3_output = None
-                        try:
-                            s3_output = resp.get("TransformOutput", {}).get("S3OutputPath")
-                        except Exception:
-                            s3_output = None
+                        s3_output = resp.get("TransformOutput", {}).get("S3OutputPath")
                         result_obj = {"transform_job": expected_transform_job_name, "status": status, "s3_output": s3_output}
                         _send_task_success(task_token, result_obj)
                         _notify_via_sns("transform_completed", result_obj)
@@ -331,12 +363,15 @@ def wait_for_transform_callback(event: Dict, context=None) -> Dict:
                         return {"ok": False, "reason": status}
                 except ClientError:
                     logger.exception("Failed to describe transform job %s", expected_transform_job_name)
-                    # proceed to retry / wait
 
             # If waiting on S3 prefix presence
             if expected_s3_prefix:
                 if expected_s3_prefix.startswith("s3://"):
-                    bucket, prefix = expected_s3_prefix[5:].split("/", 1)
+                    # parse s3://bucket/prefix
+                    tail = expected_s3_prefix[5:]
+                    parts = tail.split("/", 1)
+                    bucket = parts[0]
+                    prefix = parts[1] if len(parts) > 1 else ""
                 else:
                     if not OUTPUT_S3_BUCKET:
                         raise ValueError("expected_s3_prefix not an s3 uri and OUTPUT_S3_BUCKET not configured")
@@ -345,11 +380,11 @@ def wait_for_transform_callback(event: Dict, context=None) -> Dict:
 
                 try:
                     resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=1000)
-                except ClientError:
+                except Exception:
                     logger.exception("S3 list_objects_v2 failed for s3://%s/%s", bucket, prefix)
-                    raise
+                    resp = {}
 
-                contents = resp.get("Contents", [])
+                contents = resp.get("Contents", []) if isinstance(resp, dict) else []
                 if contents:
                     discovered_objects = [c["Key"] for c in contents]
                     logger.info("Found %d objects under prefix s3://%s/%s", len(contents), bucket, prefix)
@@ -372,10 +407,12 @@ def wait_for_transform_callback(event: Dict, context=None) -> Dict:
 
     except Exception as e:
         logger.exception("Error while waiting for transform: %s", e)
-        _send_task_failure(task_token, error="TransformWaitError", cause=str(e))
+        try:
+            _send_task_failure(task_token, error="TransformWaitError", cause=str(e))
+        except Exception:
+            logger.exception("Failed to send task failure")
         _notify_via_sns("transform_wait_error", {"run_id": run_id, "error": str(e)})
         raise
-
 
 def aggregate_results(event: Dict, context=None) -> Dict:
     """
@@ -400,7 +437,6 @@ def aggregate_results(event: Dict, context=None) -> Dict:
         logger.warning("No s3_keys provided; nothing to aggregate")
         return {"run_id": run_id, "num_parts": 0, "transcripts": [], "concatenated_transcript": ""}
 
-    s3 = s3_client()
     transcripts = []
     metadata = {"sources": []}
 
@@ -425,7 +461,7 @@ def aggregate_results(event: Dict, context=None) -> Dict:
             for t in transcripts if t.get("transcript") is not None
         )
 
-        result_obj = {
+        result_obj: Dict[str, Any] = {
             "run_id": run_id,
             "num_parts": len(transcripts),
             "transcripts": transcripts,
@@ -450,16 +486,22 @@ def aggregate_results(event: Dict, context=None) -> Dict:
         except Exception:
             logger.exception("Failed to persist final result; continuing")
 
-        _send_task_success(task_token, result_obj)
+        try:
+            _send_task_success(task_token, result_obj)
+        except Exception:
+            logger.exception("Failed to send task success for aggregate_results")
+
         _notify_via_sns("aggregate_results_complete", {"run_id": run_id, "num_parts": len(transcripts)})
         return result_obj
 
     except Exception as e:
         logger.exception("aggregate_results failed: %s", e)
-        _send_task_failure(task_token, error="AggregateResultsError", cause=str(e))
+        try:
+            _send_task_failure(task_token, error="AggregateResultsError", cause=str(e))
+        except Exception:
+            logger.exception("Failed to send task failure for aggregate_results")
         _notify_via_sns("aggregate_results_failed", {"run_id": run_id, "error": str(e)})
         raise
-
 
 def notify(event: Dict, context=None) -> Dict:
     """
@@ -486,15 +528,16 @@ def notify(event: Dict, context=None) -> Dict:
     except Exception:
         logger.exception("Failed to write notification to S3; continuing")
 
-    # Send task success for StepFn callback patterns
-    _send_task_success(task_token, obj)
-    # Publish SNS notification
+    try:
+        _send_task_success(task_token, obj)
+    except Exception:
+        logger.exception("Failed to send task success in notify")
+
     try:
         _notify_via_sns("pipeline_notification", obj)
     except Exception:
         logger.debug("SNS notify failed; continuing")
     return obj
-
 
 # ---------------------------------------------------------------------------
 # Generic Lambda entrypoint

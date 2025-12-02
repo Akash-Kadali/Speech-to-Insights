@@ -24,42 +24,58 @@ Environment variables used:
 
 from __future__ import annotations
 
+import io
 import os
 import uuid
 import json
+import time
 import logging
 from typing import Optional
-
-import boto3
-from botocore.exceptions import ClientError
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Query, Body
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-# local pipeline imports (best-effort; tests will skip if not present)
+# boto3 import defensively (some test environments may not have it)
 try:
-    from . import transcribe as transcribe_module
+    import boto3  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
+    _BOTO3_AVAILABLE = True
 except Exception:
-    transcribe_module = None
+    boto3 = None  # type: ignore
+    ClientError = Exception
+    _BOTO3_AVAILABLE = False
+
+# local pipeline helpers (best-effort)
+try:
+    from . import handlers  # central upload / s3 / workflow helpers
+except Exception:
+    handlers = None
 
 try:
-    from . import step_fn_handlers as sf_handlers
+    from . import step_fn_handlers as sf_handlers  # optional lower-level stepfn helper
 except Exception:
     sf_handlers = None
 
 logger = logging.getLogger("routes")
-log_level = os.getenv("LOG_LEVEL", "INFO")
-logger.setLevel(log_level)
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
 app = FastAPI(title="speech_to_insights API")
 
-# CORS defaults (adjust in production)
+# CORS configuration via ALLOW_ORIGINS (comma-separated) or default to "*"
+_allow_origins = os.getenv("ALLOW_ORIGINS", "*")
+if _allow_origins.strip() == "" or _allow_origins.strip() == "*":
+    allow_origins = ["*"]
+else:
+    allow_origins = [o.strip() for o in _allow_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 # Config
@@ -68,98 +84,37 @@ S3_INPUT_BUCKET = (
     or os.getenv("INPUT_S3_BUCKET")
     or os.getenv("TRANSFORM_INPUT_BUCKET_NAME")
 )
-S3_INPUT_PREFIX = os.getenv("TRANSFORM_INPUT_PREFIX", "inputs")
+S3_INPUT_PREFIX = os.getenv("TRANSFORM_INPUT_PREFIX", "inputs").strip("/")
 STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN")
 OUTPUT_S3_BUCKET = os.getenv("OUTPUT_S3_BUCKET")
-OUTPUT_S3_PREFIX = os.getenv("OUTPUT_S3_PREFIX", "outputs")
-MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", "5242880"))  # default 5MB
+OUTPUT_S3_PREFIX = os.getenv("OUTPUT_S3_PREFIX", "outputs").strip("/")
+_MAX_REALTIME_BYTES = os.getenv("MAX_REALTIME_BYTES", "5242880")
+try:
+    MAX_REALTIME_BYTES = int(_MAX_REALTIME_BYTES)
+except Exception:
+    MAX_REALTIME_BYTES = 5242880
 
 if not S3_INPUT_BUCKET:
-    logger.warning("No TRANSFORM_INPUT_BUCKET configured. /upload will fail unless bucket provided.")
+    logger.warning("No TRANSFORM_INPUT_BUCKET configured. /upload and presign will fail unless bucket provided.")
 
-# boto3 client
-_s3 = boto3.client("s3")
+# Lazy boto3 S3 client
+_s3_client = None
+
+
+def _get_s3_client():
+    global _s3_client
+    if _s3_client is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
+        _s3_client = boto3.client("s3")
+    return _s3_client
 
 
 def _s3_key_for_upload(filename: str, prefix: Optional[str] = None, run_id: Optional[str] = None) -> str:
     run_id = run_id or uuid.uuid4().hex
-    prefix = (prefix or S3_INPUT_PREFIX).rstrip("/")
+    prefix_final = (prefix or S3_INPUT_PREFIX or "inputs").rstrip("/")
     safe_name = filename.replace(" ", "_")
-    return f"{prefix}/{run_id}/{safe_name}"
-
-
-def _upload_fileobj_to_s3(fileobj, bucket: str, key: str, content_type: Optional[str] = None) -> str:
-    try:
-        extra_args = {"ContentType": content_type} if content_type else None
-        # boto3 upload_fileobj supports ExtraArgs with metadata / content type
-        if extra_args:
-            _s3.upload_fileobj(Fileobj=fileobj, Bucket=bucket, Key=key, ExtraArgs=extra_args)
-        else:
-            _s3.upload_fileobj(Fileobj=fileobj, Bucket=bucket, Key=key)
-    except ClientError as e:
-        logger.exception("S3 upload failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"S3 upload failed: {e}")
-    return f"s3://{bucket}/{key}"
-
-
-async def _save_upload_and_maybe_transcribe(upload_file: UploadFile, start_workflow: bool, background: BackgroundTasks):
-    """
-    Save uploaded file to S3 and decide next steps.
-    Returns a dict containing upload metadata and at least s3_uri.
-    """
-    if not S3_INPUT_BUCKET:
-        raise HTTPException(status_code=500, detail="Server misconfigured: no TRANSFORM_INPUT_BUCKET")
-
-    run_id = uuid.uuid4().hex
-    key = _s3_key_for_upload(upload_file.filename, prefix=S3_INPUT_PREFIX, run_id=run_id)
-
-    # Upload to S3 (UploadFile.file is a SpooledTemporaryFile which is file-like)
-    content_type = (upload_file.content_type or None)
-    s3_uri = _upload_fileobj_to_s3(upload_file.file, S3_INPUT_BUCKET, key, content_type=content_type)
-
-    result = {
-        "upload_id": run_id,
-        "s3_uri": s3_uri,
-        "s3_bucket": S3_INPUT_BUCKET,
-        "s3_key": key,
-        "status": "uploaded",
-    }
-
-    # Try to determine object size
-    try:
-        head = _s3.head_object(Bucket=S3_INPUT_BUCKET, Key=key)
-        size = head.get("ContentLength", None)
-        logger.debug("Uploaded object size: %s bytes", size)
-    except ClientError:
-        size = None
-
-    # If size available and small enough, attempt realtime transcription in background
-    if size is not None and size <= MAX_REALTIME_BYTES and transcribe_module and getattr(transcribe_module, "whisper_module", None) is not None:
-        def _bg_realtime(bucket, key, run_id):
-            try:
-                res = transcribe_module.transcribe_s3_uri(f"s3://{bucket}/{key}")
-                logger.info("Realtime transcription finished for %s: %s", key, res)
-                # optionally persist / notify elsewhere
-            except Exception:
-                logger.exception("Background realtime transcription failed for %s", key)
-
-        background.add_task(_bg_realtime, S3_INPUT_BUCKET, key, run_id)
-        result["status"] = "processing_realtime"
-        result["note"] = "Realtime transcription started in background"
-        return result
-
-    # If client requested workflow start and we have Step Functions configured, attempt to start
-    if start_workflow and sf_handlers and STATE_MACHINE_ARN:
-        try:
-            exec_resp = sf_handlers.start_state_machine_execution({"audio_s3_uri": s3_uri, "run_id": run_id})
-            result["status"] = "workflow_started"
-            result["execution"] = exec_resp
-            return result
-        except Exception:
-            logger.exception("Failed starting state machine; returning upload info")
-
-    # Otherwise return upload info
-    return result
+    return f"{prefix_final}/{run_id}/{safe_name}"
 
 
 @app.post("/upload")
@@ -173,20 +128,112 @@ async def upload_audio(
     Query param start_workflow=true will attempt to start a Step Functions execution if configured.
     """
     background_tasks = background_tasks or BackgroundTasks()
-    if not file:
+    if file is None:
         raise HTTPException(status_code=400, detail="Missing file")
 
-    content_type = (file.content_type or "").lower()
-    if not (content_type.startswith("audio") or content_type.startswith("application/octet-stream")):
-        logger.debug("Upload content_type=%s; backend may still accept it", content_type)
+    # Normalize content type and filename
+    content_type = (file.content_type or None)
+    filename = file.filename or f"upload-{int(time.time())}.bin"
+
+    # If handlers exist, delegate full responsibility (preferred)
+    if handlers and getattr(handlers, "handle_upload_fileobj", None):
+        try:
+            # Read into BytesIO and pass fileobj to handlers
+            body = await file.read()
+            bio = io.BytesIO(body)
+            res = handlers.handle_upload_fileobj(
+                fileobj=bio,
+                filename=filename,
+                start_workflow=bool(start_workflow),
+                presign=False,
+                content_type=content_type,
+            )
+            status_code = 202 if res.get("ok", True) else 500
+            return JSONResponse(status_code=status_code, content=res)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.exception("Upload failed in handlers: %s", exc)
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    # Fallback behaviour if handlers not available: upload directly to S3
+    if not S3_INPUT_BUCKET:
+        raise HTTPException(status_code=500, detail="Server misconfigured: no TRANSFORM_INPUT_BUCKET")
 
     try:
-        result = await _save_upload_and_maybe_transcribe(file, start_workflow, background_tasks)
-        return JSONResponse(status_code=202, content=result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Upload handling failed: %s", e)
+        run_id = uuid.uuid4().hex
+        key = _s3_key_for_upload(filename, prefix=S3_INPUT_PREFIX, run_id=run_id)
+        s3 = _get_s3_client()
+        try:
+            # reset pointer and upload
+            file.file.seek(0)
+        except Exception:
+            pass
+        # boto3 upload_fileobj expects a file-like object with read/seek
+        try:
+            s3.upload_fileobj(Fileobj=file.file, Bucket=S3_INPUT_BUCKET, Key=key, ExtraArgs={"ContentType": content_type} if content_type else None)
+        except TypeError:
+            # some boto3 versions don't accept None for ExtraArgs
+            if content_type:
+                s3.upload_fileobj(Fileobj=file.file, Bucket=S3_INPUT_BUCKET, Key=key, ExtraArgs={"ContentType": content_type})
+            else:
+                s3.upload_fileobj(Fileobj=file.file, Bucket=S3_INPUT_BUCKET, Key=key)
+        s3_uri = f"s3://{S3_INPUT_BUCKET}/{key}"
+        result = {"ok": True, "upload_id": run_id, "s3_uri": s3_uri, "s3_bucket": S3_INPUT_BUCKET, "s3_key": key, "status": "uploaded"}
+    except ClientError as e:
+        logger.exception("S3 upload failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.exception("Unexpected upload error: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    # If we have step function starters, optionally start workflow
+    if start_workflow and sf_handlers and STATE_MACHINE_ARN and getattr(sf_handlers, "start_state_machine_execution", None):
+        try:
+            exec_resp = sf_handlers.start_state_machine_execution({"audio_s3_uri": s3_uri, "run_id": run_id})
+            result["status"] = "workflow_started"
+            result["execution"] = exec_resp
+        except Exception:
+            logger.exception("Failed starting state machine; returning upload info")
+            result["note"] = "workflow_start_failed"
+
+    return JSONResponse(status_code=202, content=result)
+
+
+@app.get("/presign")
+def presign_put(filename: str, content_type: Optional[str] = None, expires_in: int = 900):
+    """
+    Provide a presigned PUT URL clients can use to upload directly to S3.
+    Returns JSON with 'url', 's3_uri', and 'upload_id'.
+    """
+    if handlers and getattr(handlers, "handle_upload_fileobj", None):
+        try:
+            # handlers supports presign flow
+            res = handlers.handle_upload_fileobj(
+                fileobj=None,
+                filename=filename,
+                presign=True,
+                content_type=content_type,
+            )
+            return JSONResponse(status_code=200, content=res)
+        except Exception as exc:
+            logger.exception("Presign via handlers failed: %s", exc)
+            raise HTTPException(status_code=500, detail=str(exc))
+
+    if not S3_INPUT_BUCKET:
+        raise HTTPException(status_code=500, detail="Server not configured with TRANSFORM_INPUT_BUCKET")
+
+    run_id = uuid.uuid4().hex
+    key = _s3_key_for_upload(filename, prefix=S3_INPUT_PREFIX, run_id=run_id)
+    try:
+        s3 = _get_s3_client()
+        params = {"Bucket": S3_INPUT_BUCKET, "Key": key}
+        if content_type:
+            params["ContentType"] = content_type
+        url = s3.generate_presigned_url(ClientMethod="put_object", Params=params, ExpiresIn=int(expires_in))
+        return {"url": url, "s3_uri": f"s3://{S3_INPUT_BUCKET}/{key}", "upload_id": run_id}
+    except ClientError as e:
+        logger.exception("Failed generating presigned url: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -198,47 +245,21 @@ def start_workflow(body: dict = Body(...)):
     """
     if not STATE_MACHINE_ARN:
         raise HTTPException(status_code=400, detail="STATE_MACHINE_ARN not configured")
-    if not sf_handlers:
+    if not handlers or not getattr(handlers, "start_workflow_for_s3_uri", None):
         raise HTTPException(status_code=500, detail="Orchestration handlers not available")
 
-    # Prefer audio_s3_uri or s3_uri
     s3_uri = body.get("audio_s3_uri") or body.get("s3_uri") or body.get("s3_input")
     if not s3_uri:
         raise HTTPException(status_code=400, detail="Missing s3_uri in request body")
 
     try:
-        resp = sf_handlers.start_state_machine_execution({"audio_s3_uri": s3_uri, "metadata": body.get("metadata", {})})
-        return JSONResponse(status_code=202, content={"status": "started", "execution": resp})
+        resp = handlers.start_workflow_for_s3_uri(s3_uri, run_id=body.get("run_id"))
+        if not resp.get("ok", True):
+            raise RuntimeError(resp.get("error", "workflow_start_failed"))
+        return JSONResponse(status_code=202, content={"status": "started", "execution": resp.get("execution", resp)})
     except Exception as e:
         logger.exception("Failed to start workflow: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/presign")
-def presign_put(filename: str, content_type: Optional[str] = None, expires_in: int = 900):
-    """
-    Provide a presigned PUT URL clients can use to upload directly to S3.
-    Returns JSON with 'url', 's3_uri', and 'upload_id'.
-    """
-    if not S3_INPUT_BUCKET:
-        raise HTTPException(status_code=500, detail="Server not configured with TRANSFORM_INPUT_BUCKET")
-    run_id = uuid.uuid4().hex
-    key = _s3_key_for_upload(filename, prefix=S3_INPUT_PREFIX, run_id=run_id)
-    try:
-        params = {"Bucket": S3_INPUT_BUCKET, "Key": key}
-        if content_type:
-            params["ContentType"] = content_type
-        url = _s3.generate_presigned_url(ClientMethod="put_object", Params=params, ExpiresIn=int(expires_in))
-    except ClientError as e:
-        logger.exception("Failed generating presigned url: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return {"url": url, "s3_uri": f"s3://{S3_INPUT_BUCKET}/{key}", "upload_id": run_id}
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok", "s3_input_bucket_configured": bool(S3_INPUT_BUCKET)}
 
 
 @app.get("/status/{upload_id}")
@@ -246,12 +267,21 @@ def status(upload_id: str):
     """
     Return a result if final result.json exists in OUTPUT_S3_BUCKET under prefix/run_id/result.json.
     """
+    if handlers and getattr(handlers, "fetch_result_if_exists", None):
+        try:
+            res = handlers.fetch_result_if_exists(upload_id)
+            return JSONResponse(status_code=200, content=res)
+        except Exception as exc:
+            logger.exception("fetch_result_if_exists failed: %s", exc)
+            raise HTTPException(status_code=500, detail=str(exc))
+
     if not OUTPUT_S3_BUCKET:
         raise HTTPException(status_code=404, detail="No OUTPUT_S3_BUCKET configured")
-    prefix = OUTPUT_S3_PREFIX.rstrip("/")
-    key = f"{prefix}/{upload_id}/result.json"
+
+    key = f"{OUTPUT_S3_PREFIX.rstrip('/')}/{upload_id}/result.json"
     try:
-        resp = _s3.get_object(Bucket=OUTPUT_S3_BUCKET, Key=key)
+        s3 = _get_s3_client()
+        resp = s3.get_object(Bucket=OUTPUT_S3_BUCKET, Key=key)
         body = resp["Body"].read()
         try:
             obj = json.loads(body.decode("utf-8"))
@@ -264,3 +294,25 @@ def status(upload_id: str):
             return {"found": False}
         logger.exception("S3 error while fetching status: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/health")
+def health():
+    """
+    Lightweight health probe.
+    """
+    out = {"status": "ok"}
+    # S3 input bucket check
+    try:
+        if S3_INPUT_BUCKET and _BOTO3_AVAILABLE:
+            s3 = _get_s3_client()
+            s3.list_objects_v2(Bucket=S3_INPUT_BUCKET, MaxKeys=1)
+            out["s3_input_bucket_ok"] = True
+        else:
+            out["s3_input_bucket_ok"] = bool(S3_INPUT_BUCKET)
+    except Exception:
+        out["s3_input_bucket_ok"] = False
+
+    out["step_functions_configured"] = bool(STATE_MACHINE_ARN)
+    out["handlers_available"] = handlers is not None
+    return out

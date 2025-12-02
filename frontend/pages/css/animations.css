@@ -1,0 +1,210 @@
+/* ============================================================
+   HIREX • animations.css (v2.0.0 — Unified Motion System)
+   ------------------------------------------------------------
+   • Neon depth, holo shimmer, parallax rise, and pulse motion
+   • GPU-accelerated, scroll-timeline ready, accessible
+   • Matches unified glass-neon HIREX 1.1.0 aesthetic
+   Author: Sri Akash Kadali
+   ============================================================ */
+
+/* -------------------- Motion Tokens -------------------- */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  --dur-fast: 0.25s;
+  --dur-med: 0.55s;
+  --dur-slow: 0.9s;
+
+  --stagger: 0.08s;
+  --z-toast: 9999;
+}
+
+/* -------------------- Page Entrance -------------------- */
+.page-enter {
+  animation: hirex-enter var(--dur-med) var(--ease-out) both;
+  will-change: opacity, transform, filter;
+}
+@keyframes hirex-enter {
+  from { opacity: 0; transform: translateY(40px) scale(0.97); filter: blur(8px); }
+  70% { opacity: 1; transform: translateY(-4px) scale(1.02); filter: blur(0); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* -------------------- Idle State -------------------- */
+.anim, [data-anim] {
+  opacity: 0;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: opacity, transform, filter;
+}
+.anim.is-animated, [data-anim].is-animated { opacity: 1; }
+
+/* -------------------- Core Animation Presets -------------------- */
+@keyframes hirex-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hirex-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes hirex-slide-left { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes hirex-slide-right { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes hirex-scale { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+@keyframes hirex-blur { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: blur(0); } }
+@keyframes hirex-blur-rise { from { opacity: 0; transform: translateY(16px); filter: blur(6px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+
+.anim.fade, [data-anim~="fade"] { animation: hirex-fade var(--dur-med) var(--ease-out) both; }
+.anim.rise, [data-anim~="rise"] { animation: hirex-rise var(--dur-med) var(--ease-out) both; }
+.anim.slide-left, [data-anim~="slide-left"] { animation: hirex-slide-left var(--dur-med) var(--ease-out) both; }
+.anim.slide-right, [data-anim~="slide-right"] { animation: hirex-slide-right var(--dur-med) var(--ease-out) both; }
+.anim.scale, [data-anim~="scale"] { animation: hirex-scale var(--dur-med) var(--ease-elastic) both; }
+.anim.blur, [data-anim~="blur"] { animation: hirex-blur var(--dur-med) var(--ease-out) both; }
+.anim.blur-rise, [data-anim~="blur-rise"] { animation: hirex-blur-rise var(--dur-med) var(--ease-out) both; }
+
+/* -------------------- Futuristic Motion -------------------- */
+
+/* Neon Depth (breathing glow) */
+@keyframes hirex-depth {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(110,168,254,0); }
+  50% { transform: scale(1.03); box-shadow: 0 0 30px rgba(110,168,254,.35); }
+}
+.anim.depth, [data-anim~="depth"] { animation: hirex-depth 1.8s var(--ease-elastic) infinite alternate; }
+
+/* Holo Pulse (soft luminance shimmer) */
+@keyframes hirex-pulse {
+  0% { filter: brightness(1) saturate(1); }
+  50% { filter: brightness(1.35) saturate(1.3); }
+  100% { filter: brightness(1) saturate(1); }
+}
+.anim.pulse, [data-anim~="pulse"] { animation: hirex-pulse 2.6s ease-in-out infinite; }
+
+/* Orbit Glow (logo rotation + glow bloom) */
+@keyframes hirex-orbit {
+  0% { transform: rotate(0deg) scale(1); filter: drop-shadow(0 0 0 rgba(110,168,254,0)); }
+  50% { transform: rotate(180deg) scale(1.05); filter: drop-shadow(0 0 12px rgba(110,168,254,.6)); }
+  100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 0 rgba(110,168,254,0)); }
+}
+.anim.orbit, [data-anim~="orbit"] { animation: hirex-orbit 3.2s linear infinite; }
+
+/* Shimmer Sweep (horizontal holographic glow) */
+@keyframes hirex-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.anim.shimmer, [data-anim~="shimmer"] {
+  background: linear-gradient(110deg, rgba(255,255,255,0.06) 8%, rgba(255,255,255,0.3) 18%, rgba(255,255,255,0.06) 33%);
+  background-size: 200% 100%;
+  animation: hirex-shimmer 2.8s linear infinite;
+}
+
+/* Parallax Fade (depth entrance) */
+@keyframes hirex-parallax {
+  from { opacity: 0; transform: translateY(40px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+[data-anim~="parallax"] { animation: hirex-parallax var(--dur-slow) var(--ease-out) both; }
+
+/* -------------------- Hover Micro-motions -------------------- */
+.hover-lift {
+  transition: transform 0.25s var(--ease-out), box-shadow 0.3s var(--ease-out);
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 50px rgba(110,168,254,0.25);
+}
+.hover-tilt {
+  transition: transform 0.45s var(--ease-elastic);
+}
+.hover-tilt:hover { transform: rotate3d(1,1,0,5deg); }
+
+/* Magnetic hover (slight attraction motion) */
+.hover-magnet {
+  transition: transform 0.25s var(--ease-out);
+}
+.hover-magnet:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* Floating pulse (used for icons/buttons) */
+@keyframes hirex-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.anim.float, [data-anim~="float"] { animation: hirex-float 3s ease-in-out infinite; }
+
+/* -------------------- Toast Motion -------------------- */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: -100px;
+  transform: translateX(-50%) scale(0.96);
+  opacity: 0;
+  z-index: var(--z-toast);
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  background: rgba(110,168,254,0.15);
+  color: #fff;
+  backdrop-filter: blur(10px);
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition:
+    opacity var(--dur-med) var(--ease-bounce),
+    bottom var(--dur-med) var(--ease-bounce),
+    transform var(--dur-med) var(--ease-bounce);
+}
+#toast.visible {
+  bottom: 24px;
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* -------------------- Spinner -------------------- */
+.spinner { animation: hirex-spin 0.8s linear infinite; }
+@keyframes hirex-spin { to { transform: rotate(360deg); } }
+
+/* -------------------- Stagger Helpers -------------------- */
+.anim-delay-1 { animation-delay: calc(var(--stagger) * 1); }
+.anim-delay-2 { animation-delay: calc(var(--stagger) * 2); }
+.anim-delay-3 { animation-delay: calc(var(--stagger) * 3); }
+.anim-delay-4 { animation-delay: calc(var(--stagger) * 4); }
+.anim-delay-5 { animation-delay: calc(var(--stagger) * 5); }
+
+/* Children stagger container */
+[data-stagger] > * {
+  opacity: 0;
+  transform: translateY(10px);
+  will-change: opacity, transform;
+}
+[data-stagger].is-animated > * {
+  animation: hirex-rise var(--dur-fast) var(--ease-out) both;
+}
+[data-stagger].is-animated > *:nth-child(n) {
+  animation-delay: calc(var(--stagger) * (var(--child-index, 1)));
+}
+
+/* -------------------- Reduced Motion -------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* -------------------- Scroll Timeline Ready -------------------- */
+@supports (animation-timeline: view()) {
+  [data-scroll-anim="fade-in"] {
+    animation-name: hirex-fade;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+  [data-scroll-anim="rise"] {
+    animation-name: hirex-rise;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+  [data-scroll-anim="shimmer"] {
+    animation-name: hirex-shimmer;
+    animation-timeline: view();
+    animation-range: entry 0% cover 50%;
+  }
+}

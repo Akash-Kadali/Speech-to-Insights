@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Speech to Insights | Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Analytics dashboard for Speech to Insights — topic trends, speaker participation, and keyword patterns." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Theme (swappable by JS) -->
+  <link id="theme-link" rel="stylesheet" href="/css/theme-light.css" />
+</head>
+<body>
+  <!-- Skip link for keyboard users -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">STI</div>
+      <div class="brand-text">
+        <h2>Analytics</h2>
+        <p>Trends &amp; patterns.</p>
+      </div>
+    </div>
+
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html" class="active" aria-current="page">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false">
+      Toggle Theme
+    </button>
+  </aside>
+
+  <!-- MAIN CONSOLE AREA -->
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner">
+      <!-- HEADER -->
+      <header class="page-header">
+        <h1 id="page-title" class="page-title">Analytics Dashboard</h1>
+        <p class="page-subtitle">
+          Explore topic trends, speaker participation, and keyword patterns across your meetings.
+        </p>
+      </header>
+
+      <!-- FILTERS -->
+      <section class="card" aria-labelledby="filters-heading">
+        <h2 id="filters-heading" class="visually-hidden">Filters</h2>
+        <div class="filters row" role="region" aria-label="Analytics filters">
+          <div class="field">
+            <label for="analytics-date-from">From</label>
+            <input type="date" id="analytics-date-from" name="analytics-date-from" />
+          </div>
+
+          <div class="field">
+            <label for="analytics-date-to">To</label>
+            <input type="date" id="analytics-date-to" name="analytics-date-to" />
+          </div>
+
+          <div class="field">
+            <label for="analytics-tag">Tag</label>
+            <input
+              type="text"
+              id="analytics-tag"
+              name="analytics-tag"
+              placeholder="roadmap, pricing, Q1 plan"
+              aria-label="Tag filter"
+            />
+          </div>
+
+          <div class="field">
+            <button id="analytics-refresh" class="cta-secondary small-btn" type="button">Refresh</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TOPIC FREQUENCY -->
+      <section class="card" aria-labelledby="topic-frequency-heading">
+        <h2 id="topic-frequency-heading">Topic Frequency</h2>
+        <p class="muted">How often key topics appear across your uploaded sessions.</p>
+        <div class="chart-wrap" role="img" aria-label="Topic frequency chart">
+          <canvas id="topic-chart" width="800" height="320">Your browser does not support canvas. Topic chart unavailable.</canvas>
+        </div>
+      </section>
+
+      <!-- SPEAKER PARTICIPATION -->
+      <section class="card" aria-labelledby="speaker-participation-heading">
+        <h2 id="speaker-participation-heading">Speaker Participation</h2>
+        <p class="muted">Relative speaking time or number of turns per speaker.</p>
+        <div class="chart-wrap" role="img" aria-label="Speaker participation chart">
+          <canvas id="speaker-chart" width="800" height="320">Your browser does not support canvas. Speaker chart unavailable.</canvas>
+        </div>
+      </section>
+
+      <!-- WORD CLOUD -->
+      <section class="card" aria-labelledby="wordcloud-heading">
+        <h2 id="wordcloud-heading">Keyword Word Cloud</h2>
+        <p class="muted">Most prominent keywords extracted from your conversations.</p>
+        <div id="wordcloud" class="wordcloud" role="region" aria-label="Keyword word cloud">
+          <!-- Filled dynamically by analytics.js; fallback below if script missing -->
+          <noscript>
+            <p class="muted">Word cloud requires JavaScript. Enable scripts to view.</p>
+          </noscript>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
+  </footer>
+
+  <!-- Toast -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+
+  <!-- Scripts (deferred so DOM is available). Include toast, main, analytics -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/analytics.js"></script>
+
+  <!-- Defensive inline script: lightweight fallbacks so missing scripts won't break page -->
+  <script>
+    (function () {
+      function safeInit() {
+        // showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var toast = document.getElementById('toast');
+              if (!toast) { alert(message); return; }
+              toast.textContent = message;
+              toast.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+            } catch (e) {
+              console.warn('showToast fallback failed', e);
+              alert(message);
+            }
+          };
+        }
+
+        // Theme toggle fallback + restore
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink) {
+          if (!themeToggle.__fallbackAttached) {
+            themeToggle.addEventListener('click', function () {
+              try {
+                var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+                var isDark = href.indexOf('dark') !== -1;
+                var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+                themeLink.setAttribute('href', next);
+                themeToggle.setAttribute('aria-pressed', String(!isDark));
+                try { localStorage.setItem('sti-theme', next); } catch (e) {}
+              } catch (e) {
+                console.warn('Theme toggle fallback error', e);
+              }
+            });
+            themeToggle.__fallbackAttached = true;
+          }
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+        }
+
+        // Analytics refresh fallback and placeholder rendering
+        var refreshBtn = document.getElementById('analytics-refresh');
+        var topicCanvas = document.getElementById('topic-chart');
+        var speakerCanvas = document.getElementById('speaker-chart');
+        var wordcloud = document.getElementById('wordcloud');
+
+        function renderPlaceholderChart(canvas, text) {
+          if (!canvas || !canvas.getContext) return;
+          var ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.font = '16px sans-serif';
+          ctx.fillStyle = '#666';
+          ctx.textAlign = 'center';
+          ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        }
+
+        if (refreshBtn && typeof window.analyticsRefresh !== 'function') {
+          refreshBtn.addEventListener('click', function () {
+            renderPlaceholderChart(topicCanvas, 'Topic chart placeholder — no data');
+            renderPlaceholderChart(speakerCanvas, 'Speaker chart placeholder — no data');
+            if (wordcloud && wordcloud.children.length === 0) {
+              var p = document.createElement('p');
+              p.className = 'muted';
+              p.textContent = 'No keywords to display. Seed or upload sessions to populate analytics.';
+              wordcloud.appendChild(p);
+            }
+            window.showToast('Analytics refreshed (placeholder)', 1800);
+          });
+        }
+
+        if (topicCanvas && (!topicCanvas.__renderedByAnalytics)) {
+          renderPlaceholderChart(topicCanvas, 'Topic chart placeholder — no data');
+        }
+        if (speakerCanvas && (!speakerCanvas.__renderedByAnalytics)) {
+          renderPlaceholderChart(speakerCanvas, 'Speaker chart placeholder — no data');
+        }
+        if (wordcloud && wordcloud.children.length === 0) {
+          var p0 = document.createElement('p');
+          p0.className = 'muted';
+          p0.textContent = 'No keywords to display. Use Refresh to load placeholder analytics.';
+          wordcloud.appendChild(p0);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Analytics require JavaScript.
+    </div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,306 @@
+
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap");
+
+/* ========================= TOKENS ========================= */
+:root {
+  --bg: radial-gradient(900px 700px at 80% -10%, rgba(110,168,254,.08), transparent 60%), #0a1020;
+  --surface-1: rgba(255,255,255,.06);
+  --surface-2: rgba(255,255,255,.12);
+  --text-100: #ffffff;
+  --text-400: #b8c1d9;
+  --accent: #6ea8fe;
+  --radius: 14px;
+  --shadow: 0 12px 36px rgba(0,0,0,.45);
+  --ease-out: cubic-bezier(.16,1,.3,1);
+}
+
+/* 🌗 Light Theme */
+[data-theme="light"] {
+  --bg: linear-gradient(180deg, #f9fbff 0%, #e8efff 100%);
+  --surface-1: rgba(255,255,255,0.85);
+  --surface-2: rgba(0,0,0,0.08);
+  --text-100: #0a1020;
+  --text-400: #4b4f68;
+  --accent: #6a6cff;
+  --shadow: 0 8px 28px rgba(0,0,0,0.15);
+}
+
+/* ========================= BASE ========================= */
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text-100);
+  font-family: "Outfit", "Poppins", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  transition: background 0.6s var(--ease-out), color 0.4s var(--ease-out);
+}
+
+/* ========================= SIDEBAR ========================= */
+aside.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 100vh;
+  background: rgba(12,18,40,0.85);
+  backdrop-filter: blur(14px) saturate(160%);
+  border-right: 1px solid var(--surface-2);
+  padding: 1.75rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: inset -2px 0 18px rgba(0,0,0,.4);
+  z-index: 999;
+}
+
+/* --- Brand --- */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+.brand img {
+  height: 70px;
+  width: 70px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.05);
+  padding: .4rem;
+  box-shadow: 0 0 24px rgba(110,168,254,.25);
+}
+.logo-text {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  font-size: 1.4rem;
+  background: linear-gradient(90deg,#ffffff,#9f78ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* --- Nav Links --- */
+.vnav {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+.vnav a {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  color: var(--text-400);
+  font-weight: 500;
+  text-decoration: none;
+  padding: .65rem .9rem;
+  border-radius: var(--radius);
+  margin-inline: .5rem;
+  transition: background .3s var(--ease-out),
+              transform .2s var(--ease-out),
+              color .25s var(--ease-out);
+}
+.vnav a:hover {
+  background: rgba(110,168,254,0.15);
+  color: #fff;
+  transform: translateX(4px);
+}
+.vnav a[aria-current="page"],
+.vnav a.active-link {
+  background: linear-gradient(90deg,rgba(110,168,254,0.25),rgba(110,168,254,0.05));
+  border-left: 3px solid var(--accent);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(110,168,254,0.15);
+}
+
+/* ========================= MAIN ========================= */
+main.console {
+  margin-left: 240px;
+  padding: 2.5rem clamp(2rem, 6vw, 4rem);
+  display: flex;
+  justify-content: center;
+  animation: fadeIn .6s var(--ease-out);
+}
+.main-inner {
+  width: 100%;
+  max-width: 960px;
+  text-align: center;
+}
+
+/* --- Titles --- */
+h1, h2 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.6rem;
+}
+h1.page-title {
+  font-size: 2.4rem;
+  text-align: center;
+  background: linear-gradient(90deg,#ffffff,#9f78ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1.5rem;
+  text-shadow: 0 4px 18px rgba(159,120,255,0.25);
+}
+p.muted {
+  color: var(--text-400);
+  text-align: center;
+  margin-bottom: 1.25rem;
+  line-height: 1.6;
+}
+
+/* ========================= CARDS ========================= */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 2rem;
+  box-shadow: var(--shadow);
+  transition: transform .25s var(--ease-out), box-shadow .25s var(--ease-out);
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 50px rgba(0,0,0,.55), 0 0 14px rgba(110,168,254,.25);
+}
+.card + .card { margin-top: 1.5rem; }
+
+/* ========================= FORMS ========================= */
+.field { margin-bottom: 1.25rem; }
+label {
+  display: block;
+  font-weight: 600;
+  color: var(--text-400);
+  margin-bottom: 0.4rem;
+}
+input, textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--surface-2);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-100);
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  transition: border-color .25s var(--ease-out),
+              background .25s var(--ease-out),
+              box-shadow .25s var(--ease-out);
+}
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(255,255,255,0.1);
+  box-shadow: 0 0 10px rgba(110,168,254,0.25);
+}
+
+/* ========================= BUTTONS ========================= */
+.cta-primary, .cta-secondary {
+  border-radius: var(--radius);
+  font-weight: 600;
+  padding: 0.8rem 1.25rem;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .25s var(--ease-out);
+}
+.cta-primary {
+  background: linear-gradient(135deg,#6ea8fe,#9f78ff);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 24px rgba(110,168,254,0.25);
+}
+.cta-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(110,168,254,.35);
+}
+.cta-secondary {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-100);
+  border: 1px solid var(--surface-2);
+}
+.cta-secondary:hover {
+  background: rgba(255,255,255,0.15);
+  box-shadow: 0 0 18px rgba(110,168,254,.2);
+}
+
+/* ========================= TOAST ========================= */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: -100px;
+  transform: translateX(-50%) scale(0.96);
+  opacity: 0;
+  z-index: 9999;
+  background: rgba(110,168,254,0.15);
+  backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: opacity .5s var(--ease-out), bottom .5s var(--ease-out), transform .5s var(--ease-out);
+}
+#toast.visible {
+  bottom: 28px;
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ========================= ACCESSIBILITY ========================= */
+.user-is-tabbing button:focus,
+.user-is-tabbing a:focus,
+.user-is-tabbing input:focus,
+.user-is-tabbing textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-color: var(--accent);
+}
+
+/* ========================= FOOTER ========================= */
+footer {
+  margin-left: 240px;
+  border-top: 1px solid var(--surface-2);
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--text-400);
+  font-size: 0.9rem;
+  backdrop-filter: blur(6px);
+}
+
+/* ========================= ANIMATIONS ========================= */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========================= RESPONSIVE ========================= */
+@media (max-width: 880px) {
+  aside.sidebar {
+    position: fixed;
+    transform: translateX(-100%);
+    width: 220px;
+    height: 100%;
+    transition: transform .35s var(--ease-out);
+    z-index: 999;
+  }
+  body.nav-open aside.sidebar {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+  }
+  main.console {
+    margin-left: 0;
+    padding: 1.25rem;
+  }
+  footer { margin-left: 0; }
+}

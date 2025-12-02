@@ -22,7 +22,6 @@ Notes:
 from __future__ import annotations
 
 import os
-import sys
 import uuid
 import json
 import logging
@@ -32,15 +31,22 @@ import shutil
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
-import boto3
-from botocore.exceptions import ClientError
-
-# Local whisper module (provides transcribe_bytes_realtime, process_s3_event_and_transcribe, start_sagemaker_transform)
+# boto3 import defensively (some test environments won't have AWS SDK)
 try:
-    from . import whisper as whisper_module
+    import boto3  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
+    _BOTO3_AVAILABLE = True
 except Exception:
-    # allow running as a script from repository root
-    import whisper as whisper_module  # type: ignore
+    boto3 = None  # type: ignore
+    ClientError = Exception
+    _BOTO3_AVAILABLE = False
+
+# Local whisper module (best-effort)
+try:
+    # prefer package-local import
+    from . import whisper as whisper_module  # type: ignore
+except Exception:
+    whisper_module = None  # type: ignore
 
 logger = logging.getLogger("transcribe")
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
@@ -49,7 +55,17 @@ if not logger.handlers:
     ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(ch)
 
-S3 = boto3.client("s3")
+# Lazy S3 client
+_s3_client = None
+
+
+def _get_s3_client():
+    global _s3_client
+    if _s3_client is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 is not available in this environment")
+        _s3_client = boto3.client("s3")
+    return _s3_client
 
 
 # -------------------------
@@ -156,8 +172,9 @@ def upload_file_to_s3(local_path: str, bucket: str, key: str) -> str:
     Upload local_path to s3://bucket/key and return s3://... URI on success.
     """
     logger.info("Uploading %s -> s3://%s/%s", local_path, bucket, key)
+    s3 = _get_s3_client()
     try:
-        S3.upload_file(local_path, bucket, key)
+        s3.upload_file(local_path, bucket, key)
     except ClientError as e:
         logger.exception("S3 upload failed: %s", e)
         raise
@@ -195,10 +212,12 @@ def transcribe_local_file(
     - transform_kicked: whisper transform response
     - error: on failure
     """
-    tmp_dir = tmp_dir or tempfile.mkdtemp(prefix="transcribe-")
+    caller_provided_tmp = tmp_dir is not None
+    if not caller_provided_tmp:
+        tmp_dir = tempfile.mkdtemp(prefix="transcribe-")
     tmp_path = Path(tmp_dir)
     tmp_path.mkdir(parents=True, exist_ok=True)
-    created_tmp = True
+    created_tmp = not caller_provided_tmp
 
     try:
         # Step 1: normalize
@@ -229,31 +248,25 @@ def transcribe_local_file(
                     s3_inputs.append(s3_uri)
 
                 result = {"mode": "uploaded_chunks", "s3_inputs": s3_inputs, "num_chunks": len(s3_inputs)}
-                # Optionally kick off transform for the entire prefix if whisper supports it
-                if kick_off_transform and hasattr(whisper_module, "start_sagemaker_transform") and hasattr(whisper_module, "TRANSFORM_OUTPUT_BUCKET"):
-                    try:
-                        output_uri = whisper_module.TRANSFORM_OUTPUT_BUCKET if getattr(whisper_module, "TRANSFORM_OUTPUT_BUCKET", None) else None
-                        # If whisper expects outputs and you want to start transform per file, caller can do so separately.
-                        result["note"] = "chunks_uploaded; transform not auto-started for chunked uploads"
-                    except Exception:
-                        logger.debug("No transform auto-start attempted for chunked upload")
+                # Caller can start transforms separately; keep behavior conservative
+                result["note"] = "chunks_uploaded"
                 return result
             else:
-                # No S3: attempt realtime per chunk if small enough
+                # No S3: attempt realtime per chunk if transcribe_bytes_realtime available
                 results = []
                 for cp in chunk_paths:
                     size = Path(cp).stat().st_size
-                    if size <= threshold and getattr(whisper_module, "SAGEMAKER_ENDPOINT", None):
+                    if size <= threshold and whisper_module and getattr(whisper_module, "transcribe_bytes_realtime", None):
                         with open(cp, "rb") as fh:
                             out = whisper_module.transcribe_bytes_realtime(fh.read())
                         text = out.get("text", "")
                         results.append({"chunk": Path(cp).name, "text": text, "meta": out})
                     else:
-                        results.append({"chunk": Path(cp).name, "text": None, "notice": "too_large_for_realtime"})
+                        results.append({"chunk": Path(cp).name, "text": None, "notice": "too_large_for_realtime_or_no_whisper"})
                 return {"mode": "local_chunks_processed", "results": results}
 
         # No splitting: decide realtime vs batch
-        if file_size <= threshold and getattr(whisper_module, "SAGEMAKER_ENDPOINT", None):
+        if file_size <= threshold and whisper_module and getattr(whisper_module, "transcribe_bytes_realtime", None):
             logger.info("Using realtime path for normalized file")
             with open(normalized, "rb") as fh:
                 audio_bytes = fh.read()
@@ -274,7 +287,7 @@ def transcribe_local_file(
         fake_record = {"s3": {"bucket": {"name": s3_output_bucket}, "object": {"key": s3_key, "size": Path(normalized).stat().st_size}}}
 
         # If caller wants to start the transform immediately and whisper supports it, attempt it.
-        if kick_off_transform and hasattr(whisper_module, "process_s3_event_and_transcribe"):
+        if kick_off_transform and whisper_module and getattr(whisper_module, "process_s3_event_and_transcribe", None):
             try:
                 result = whisper_module.process_s3_event_and_transcribe(fake_record)
                 return {"mode": "transform_kicked", "s3_input": s3_uri, "result": result}
@@ -285,19 +298,20 @@ def transcribe_local_file(
             return {"mode": "uploaded_for_transform", "s3_input": s3_uri}
     finally:
         # clean up temp dir if we created it
-        if created_tmp and tmp_dir and os.path.exists(tmp_dir):
+        if created_tmp and tmp_dir and Path(tmp_dir).exists():
             try:
                 shutil.rmtree(tmp_dir)
             except Exception:
-                # non-fatal cleanup error
                 logger.debug("Failed to remove tmp dir %s", tmp_dir)
 
 
 def transcribe_s3_uri(s3_uri: str) -> Dict:
     """
     Given an s3://bucket/key, call whisper.process_s3_event_and_transcribe to decide realtime vs transform.
-    Returns the whisper result.
+    Returns the whisper result (or raises if whisper_module not available).
     """
+    if not whisper_module or not getattr(whisper_module, "process_s3_event_and_transcribe", None):
+        raise RuntimeError("whisper.process_s3_event_and_transcribe not available")
     bucket, key = parse_s3_uri(s3_uri)
     fake_record = {"s3": {"bucket": {"name": bucket}, "object": {"key": key}}}
     return whisper_module.process_s3_event_and_transcribe(fake_record)

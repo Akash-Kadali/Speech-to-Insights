@@ -31,11 +31,19 @@ import logging
 import time
 from typing import Dict, Any, Optional, Tuple, IO
 
-import boto3
-from botocore.exceptions import ClientError
+# boto3 is optional in local dev; import lazily to avoid import-time failures
+try:
+    import boto3  # type: ignore
+    from botocore.exceptions import ClientError  # type: ignore
+    _BOTO3_AVAILABLE = True
+except Exception:
+    boto3 = None  # type: ignore
+    ClientError = Exception  # fallback for typing in except blocks
+    _BOTO3_AVAILABLE = False
 
 logger = logging.getLogger("handlers")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
 # Best-effort imports of local integrations
 try:
@@ -65,11 +73,19 @@ STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN")
 OUTPUT_S3_BUCKET = os.getenv("OUTPUT_S3_BUCKET")
 OUTPUT_S3_PREFIX = os.getenv("OUTPUT_S3_PREFIX", "outputs").strip("/")
 MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", "5242880"))  # 5MB
-PRESIGN_URL_EXPIRES = int(os.getenv("PRESIGN_URL_EXPIRES", "900"))
+PRESIGN_URL_EXPIRES = int(os.getenv("PRESIGN_URL_EXPIRES", "900"))  # seconds
 
-# boto3 clients
-_s3 = boto3.client("s3")
-_sfn = boto3.client("stepfunctions")
+# Create clients lazily to avoid failing imports in environments without AWS creds
+def _get_s3_client():
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 not available in this environment")
+    return boto3.client("s3")
+
+
+def _get_sfn_client():
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 not available in this environment")
+    return boto3.client("stepfunctions")
 
 
 # -------------------------
@@ -77,9 +93,9 @@ _sfn = boto3.client("stepfunctions")
 # -------------------------
 def _s3_key_for_upload(filename: str, run_id: Optional[str] = None, prefix: Optional[str] = None) -> str:
     run_id = run_id or uuid.uuid4().hex
-    prefix = (prefix or TRANSFORM_INPUT_PREFIX).rstrip("/")
+    prefix_final = (prefix or TRANSFORM_INPUT_PREFIX or "inputs").rstrip("/")
     safe_name = filename.replace(" ", "_")
-    return f"{prefix}/{run_id}/{safe_name}"
+    return f"{prefix_final}/{run_id}/{safe_name}"
 
 
 def _upload_fileobj(fileobj: IO[bytes], bucket: str, key: str, content_type: Optional[str] = None) -> str:
@@ -87,50 +103,64 @@ def _upload_fileobj(fileobj: IO[bytes], bucket: str, key: str, content_type: Opt
     Upload file-like object to S3 and return s3:// URI.
     Will attempt to rewind fileobj if possible.
     """
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 required to upload to S3")
+
     try:
+        s3 = _get_s3_client()
         try:
             fileobj.seek(0)
         except Exception:
             pass
         extra = {"ContentType": content_type} if content_type else {}
-        _s3.upload_fileobj(fileobj, bucket, key, ExtraArgs=extra)
+        s3.upload_fileobj(fileobj, bucket, key, ExtraArgs=extra)
         uri = f"s3://{bucket}/{key}"
         logger.info("Uploaded file to %s", uri)
         return uri
     except ClientError as exc:
-        logger.exception("S3 upload failed for %s/%s", bucket, key)
+        logger.exception("S3 upload failed for %s/%s: %s", bucket, key, exc)
         raise
 
 
 def _upload_bytes_to_s3(data: bytes, bucket: str, key: str, content_type: Optional[str] = None) -> str:
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 required to upload to S3")
+
     try:
+        s3 = _get_s3_client()
         extra = {"ContentType": content_type} if content_type else {}
-        _s3.put_object(Bucket=bucket, Key=key, Body=data, **extra)
+        s3.put_object(Bucket=bucket, Key=key, Body=data, **(extra or {}))
         uri = f"s3://{bucket}/{key}"
         logger.info("Uploaded bytes to %s (size=%d)", uri, len(data))
         return uri
-    except ClientError:
-        logger.exception("S3 put_object failed for %s/%s", bucket, key)
+    except ClientError as exc:
+        logger.exception("S3 put_object failed for %s/%s: %s", bucket, key, exc)
         raise
 
 
 def _head_object(bucket: str, key: str) -> Dict[str, Any]:
+    if not _BOTO3_AVAILABLE:
+        return {}
     try:
-        return _s3.head_object(Bucket=bucket, Key=key)
+        s3 = _get_s3_client()
+        return s3.head_object(Bucket=bucket, Key=key)
     except ClientError as exc:
         logger.debug("S3 head_object failed for %s/%s: %s", bucket, key, exc)
         return {}
 
 
 def _generate_presigned_put(bucket: str, key: str, expires_in: int = PRESIGN_URL_EXPIRES, content_type: Optional[str] = None) -> Dict[str, str]:
+    if not _BOTO3_AVAILABLE:
+        raise RuntimeError("boto3 required to generate presigned URLs")
     params = {"Bucket": bucket, "Key": key}
     if content_type:
         params["ContentType"] = content_type
     try:
-        url = _s3.generate_presigned_url("put_object", Params=params, ExpiresIn=int(expires_in))
+        s3 = _get_s3_client()
+        url = s3.generate_presigned_url("put_object", Params=params, ExpiresIn=int(expires_in))
         return {"url": url, "s3_uri": f"s3://{bucket}/{key}"}
-    except ClientError:
-        logger.exception("Failed to generate presigned URL for s3://%s/%s", bucket, key)
+    except ClientError as exc:
+        logger.exception("Failed to generate presigned URL for s3://%s/%s: %s", bucket, key, exc)
         raise
 
 
@@ -158,17 +188,19 @@ def handle_upload_fileobj(fileobj: IO[bytes],
         "error": "..."   # on failure
       }
     """
+    # Presign path
     if presign:
         if not TRANSFORM_INPUT_BUCKET:
             return {"ok": False, "error": "TRANSFORM_INPUT_BUCKET not configured for presign"}
         run_id = run_id or uuid.uuid4().hex
         key = _s3_key_for_upload(filename, run_id=run_id)
         try:
-            presign = _generate_presigned_put(TRANSFORM_INPUT_BUCKET, key, expires_in=PRESIGN_URL_EXPIRES, content_type=content_type)
-            return {"ok": True, "upload_id": run_id, "status": "presigned", "result": presign}
+            presign_result = _generate_presigned_put(TRANSFORM_INPUT_BUCKET, key, expires_in=PRESIGN_URL_EXPIRES, content_type=content_type)
+            return {"ok": True, "upload_id": run_id, "status": "presigned", "result": presign_result}
         except Exception as exc:
             return {"ok": False, "error": f"presign_failed: {exc}"}
 
+    # Ensure bucket configured
     if not TRANSFORM_INPUT_BUCKET:
         logger.error("TRANSFORM_INPUT_BUCKET is not configured")
         return {"ok": False, "error": "TRANSFORM_INPUT_BUCKET not configured"}
@@ -181,9 +213,10 @@ def handle_upload_fileobj(fileobj: IO[bytes],
     except Exception as exc:
         return {"ok": False, "error": f"s3_upload_failed: {exc}"}
 
-    # Decide realtime vs batch by object size
+    # Decide realtime vs batch by object size (head may be empty if bucket policies differ)
     head = _head_object(TRANSFORM_INPUT_BUCKET, key)
-    size = head.get("ContentLength")
+    size = head.get("ContentLength") if isinstance(head, dict) else None
+
     result: Dict[str, Any] = {
         "ok": True,
         "upload_id": run_id,
@@ -197,7 +230,10 @@ def handle_upload_fileobj(fileobj: IO[bytes],
     try:
         if size is not None and size <= MAX_REALTIME_BYTES and whisper_module and getattr(whisper_module, "transcribe_bytes_realtime", None):
             try:
-                resp = _s3.get_object(Bucket=TRANSFORM_INPUT_BUCKET, Key=key)
+                if not _BOTO3_AVAILABLE:
+                    raise RuntimeError("boto3 required to fetch object for realtime transcription")
+                s3 = _get_s3_client()
+                resp = s3.get_object(Bucket=TRANSFORM_INPUT_BUCKET, Key=key)
                 audio_bytes = resp["Body"].read()
                 out = whisper_module.transcribe_bytes_realtime(audio_bytes)
                 result["status"] = "processing_realtime"
@@ -233,7 +269,7 @@ def handle_s3_event_record(record: Dict[str, Any]) -> Dict[str, Any]:
     otherwise falls back to transcribe_module.transcribe_s3_uri when present.
     """
     try:
-        s3_info = record.get("s3", {})
+        s3_info = record.get("s3", {}) if isinstance(record, dict) else {}
         bucket = s3_info.get("bucket", {}).get("name")
         key = s3_info.get("object", {}).get("key")
         if not bucket or not key:
@@ -261,7 +297,7 @@ def handle_s3_event_record(record: Dict[str, Any]) -> Dict[str, Any]:
         logger.error("No transcription handler available")
         return {"ok": False, "error": "no_transcription_handler"}
     except Exception as exc:
-        logger.exception("Unexpected error handling s3 event record")
+        logger.exception("Unexpected error handling s3 event record: %s", exc)
         return {"ok": False, "error": str(exc)}
 
 
@@ -280,7 +316,7 @@ def start_workflow_for_s3_uri(s3_uri: str, run_id: Optional[str] = None) -> Dict
         exec_resp = sf_handlers.start_state_machine_execution({"audio_s3_uri": s3_uri, "run_id": run_id})
         return {"ok": True, "execution": exec_resp}
     except Exception as exc:
-        logger.exception("Failed to start workflow for %s", s3_uri)
+        logger.exception("Failed to start workflow for %s: %s", s3_uri, exc)
         return {"ok": False, "error": str(exc)}
 
 
@@ -295,8 +331,12 @@ def fetch_result_if_exists(run_id: str) -> Dict[str, Any]:
         return {"ok": False, "error": "OUTPUT_S3_BUCKET not configured"}
 
     key = f"{OUTPUT_S3_PREFIX.rstrip('/')}/{run_id}/result.json"
+    if not _BOTO3_AVAILABLE:
+        return {"ok": False, "error": "boto3 not available to fetch results"}
+
     try:
-        resp = _s3.get_object(Bucket=OUTPUT_S3_BUCKET, Key=key)
+        s3 = _get_s3_client()
+        resp = s3.get_object(Bucket=OUTPUT_S3_BUCKET, Key=key)
         body = resp["Body"].read()
         try:
             obj = json.loads(body.decode("utf-8"))
@@ -304,10 +344,14 @@ def fetch_result_if_exists(run_id: str) -> Dict[str, Any]:
         except Exception:
             return {"ok": True, "found": True, "result_raw": body.decode("utf-8", errors="replace")}
     except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "")
+        # robustly handle missing key/bucket
+        try:
+            code = exc.response.get("Error", {}).get("Code", "")
+        except Exception:
+            code = ""
         if code in ("NoSuchKey", "404", "NoSuchBucket"):
             return {"ok": True, "found": False}
-        logger.exception("S3 error while fetching result for run_id %s", run_id)
+        logger.exception("S3 error while fetching result for run_id %s: %s", run_id, exc)
         return {"ok": False, "error": str(exc)}
 
 
@@ -330,12 +374,13 @@ def postprocess_transcript_and_redact(transcript_text: str, redact: bool = True)
 
         if redact:
             if pii_detector and getattr(pii_detector, "redact_pii", None):
-                redacted, _ = pii_detector.redact_pii(transcript_text)
+                redacted, _meta = pii_detector.redact_pii(transcript_text)
                 out["redacted"] = redacted
+                out["redaction_meta"] = _meta
             else:
                 out["redacted"] = transcript_text
-    except Exception:
-        logger.exception("PII detection/redaction failed")
+    except Exception as exc:
+        logger.exception("PII detection/redaction failed: %s", exc)
         out["pii_report"] = {"error": "pii_detection_failed"}
         if redact:
             out["redacted"] = transcript_text
@@ -347,6 +392,7 @@ def postprocess_transcript_and_redact(transcript_text: str, redact: bool = True)
 # -------------------------
 def _cli():
     import argparse
+
     parser = argparse.ArgumentParser(description="Handlers utility CLI for quick local tests.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 

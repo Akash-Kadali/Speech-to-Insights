@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Speech to Insights | Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Admin dashboard for Speech to Insights project — monitor processing queue and manage demo data." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Theme (swappable via JS) -->
+  <link id="theme-link" rel="stylesheet" href="/css/theme-light.css" />
+</head>
+<body>
+  <!-- Skip link for keyboard users -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">STI</div>
+      <div class="brand-text">
+        <h2>Admin</h2>
+        <p>System overview.</p>
+      </div>
+    </div>
+
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html" class="active" aria-current="page">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false">
+      Toggle Theme
+    </button>
+  </aside>
+
+  <!-- MAIN CONSOLE AREA -->
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner">
+      <!-- HEADER -->
+      <header class="page-header">
+        <h1 id="page-title" class="page-title">Admin Dashboard</h1>
+        <p class="page-subtitle">
+          Monitor processing status and manage demo data for this project.
+        </p>
+      </header>
+
+      <!-- PROCESSING QUEUE -->
+      <section class="card" aria-labelledby="queue-heading">
+        <h2 id="queue-heading">Processing Queue</h2>
+        <p class="muted">
+          Recent uploads that are currently being processed or waiting in the queue.
+        </p>
+        <ul id="queue-list" class="list subtle" aria-live="polite" aria-atomic="true">
+          <!-- Filled dynamically by admin.js or fallback script -->
+        </ul>
+      </section>
+
+      <!-- MAINTENANCE / DEMO CONTROLS -->
+      <section class="card" aria-labelledby="maintenance-heading">
+        <h2 id="maintenance-heading">Maintenance &amp; Demo Data</h2>
+        <p class="muted">
+          These controls are for demonstration only and simulate seeding or clearing data.
+        </p>
+        <div class="actions">
+          <button id="seed-demo-data" class="cta-secondary" type="button">Seed demo data</button>
+          <button id="clear-demo-data" class="cta-ghost" type="button">Clear demo data</button>
+        </div>
+      </section>
+
+      <!-- SYSTEM INFO -->
+      <section class="card" aria-labelledby="system-heading">
+        <h2 id="system-heading">System Info</h2>
+        <ul class="list subtle">
+          <li>Environment: <strong>Local / Demo</strong></li>
+          <li>Model: <strong>Offline / Precomputed outputs</strong></li>
+          <li>Course: <strong>MSML 650 – Term Project</strong></li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
+  </footer>
+
+  <!-- Toast Notification -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+
+  <!-- Scripts (deferred so DOM is available). Include toast, main, and admin -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/admin.js"></script>
+
+  <!-- Defensive inline script: lightweight fallbacks so missing scripts won't break page -->
+  <script>
+    (function () {
+      function safeInit() {
+        // showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var toast = document.getElementById('toast');
+              if (!toast) { alert(message); return; }
+              toast.textContent = message;
+              toast.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+            } catch (e) {
+              console.warn('showToast fallback failed', e);
+              alert(message);
+            }
+          };
+        }
+
+        // Theme toggle fallback + restore
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink) {
+          if (!themeToggle.__fallbackAttached) {
+            themeToggle.addEventListener('click', function () {
+              try {
+                var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+                var isDark = href.indexOf('dark') !== -1;
+                var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+                themeLink.setAttribute('href', next);
+                themeToggle.setAttribute('aria-pressed', String(!isDark));
+                try { localStorage.setItem('sti-theme', next); } catch (e) {}
+              } catch (e) {
+                console.warn('Theme toggle fallback error', e);
+              }
+            });
+            themeToggle.__fallbackAttached = true;
+          }
+
+          // restore persisted theme if main.js didn't
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+        }
+
+        // Admin controls fallback: seed/clear and simple queue UI if admin.js missing
+        var seedBtn = document.getElementById('seed-demo-data');
+        var clearBtn = document.getElementById('clear-demo-data');
+        var queueList = document.getElementById('queue-list');
+
+        function renderQueue(items) {
+          if (!queueList) return;
+          queueList.innerHTML = '';
+          if (!items || items.length === 0) {
+            var li = document.createElement('li');
+            li.textContent = 'Queue is empty';
+            li.className = 'muted';
+            queueList.appendChild(li);
+            return;
+          }
+          items.forEach(function (it) {
+            var li = document.createElement('li');
+            li.textContent = it;
+            queueList.appendChild(li);
+          });
+        }
+
+        if (seedBtn && typeof window.seedDemoData !== 'function') {
+          seedBtn.addEventListener('click', function () {
+            var items = [
+              'upload_2025-11-30_12:02.wav — processing',
+              'meeting_2025-11-29_09:10.mp3 — queued',
+              'lecture_2025-11-28_16:45.mp3 — completed'
+            ];
+            renderQueue(items);
+            window.showToast('Demo data seeded', 2500);
+          });
+        }
+
+        if (clearBtn && typeof window.clearDemoData !== 'function') {
+          clearBtn.addEventListener('click', function () {
+            renderQueue([]);
+            window.showToast('Demo data cleared', 2000);
+          });
+        }
+
+        // Ensure there's at least an empty placeholder
+        if (queueList && queueList.children.length === 0) {
+          renderQueue([]);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Admin tools are unavailable.
+    </div>
+  </noscript>
+</body>
+</html>

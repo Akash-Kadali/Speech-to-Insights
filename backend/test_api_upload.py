@@ -81,8 +81,12 @@ def _discover_upload_paths(app) -> List[str]:
         if "start-workflow" in low or "start_workflow" in low:
             candidates.append(path)
     # fallback to /upload if present
-    if "/upload" in [r.path for r in getattr(app, "routes", []) if hasattr(r, "path")]:
-        candidates.insert(0, "/upload")
+    try:
+        all_paths = [r.path for r in getattr(app, "routes", []) if hasattr(r, "path")]
+        if "/upload" in all_paths:
+            candidates.insert(0, "/upload")
+    except Exception:
+        pass
     # dedupe while preserving order
     seen = set()
     deduped = []

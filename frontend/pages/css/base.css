@@ -1,0 +1,339 @@
+/* ============================================================
+   HIREX • base.css (v1.1.0 — Unified Foundation Layer)
+   ------------------------------------------------------------
+   Core tokens, typography, layout, and accessibility baseline
+   for HIREX Neon Glass Interface.
+   Compatible with all v1.1.0 modules.
+   Author: Sri Akash Kadali
+   ============================================================ */
+
+/* ------------------------------ Fonts ------------------------------ */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+
+/* ------------------------------ Tokens ------------------------------ */
+:root {
+  /* ===== Brand Spectrum ===== */
+  --primary-950: #060913;
+  --primary-900: #0a1020;
+  --primary-800: #0f1c36;
+  --primary-700: #102d59;
+  --primary-600: #155eab;
+  --primary-500: #2a7bd9;
+  --primary-400: #38bdf8;
+  --accent: #6ea8fe;
+  --accent-soft: rgba(110,168,254,.25);
+
+  /* ===== Surfaces ===== */
+  --bg:
+    radial-gradient(1000px 600px at 70% -10%, rgba(110,168,254,.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 30%, rgba(159,120,255,.06), transparent 60%),
+    #0a1020;
+  --surface-1: rgba(255,255,255,.05);
+  --surface-2: rgba(255,255,255,.12);
+  --surface-3: rgba(255,255,255,.18);
+  --border: rgba(255,255,255,.16);
+
+  /* ===== Text ===== */
+  --text-100: #ffffff;
+  --text-200: #f0f4ff;
+  --text-400: #b8c1d9;
+  --text-600: #8a95b6;
+
+  /* ===== System ===== */
+  --success: #1fd6a9;
+  --warning: #ffcf5f;
+  --danger: #ff7b7b;
+  --info: #7bb7ff;
+
+  /* ===== Effects ===== */
+  --focus: 0 0 0 .14rem rgba(110,168,254,.65), 0 6px 24px rgba(0,0,0,.24);
+  --shadow: 0 12px 40px rgba(0,0,0,.35);
+  --radius: 14px;
+  --radius-sm: 10px;
+
+  /* ===== Typography ===== */
+  --font-sans: "Outfit", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --container: 1120px;
+
+  /* ===== Spacing ===== */
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* ===== Motion ===== */
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --ease-in: cubic-bezier(.5,0,.75,0);
+  --ease-elastic: cubic-bezier(.175,.885,.32,1.275);
+  --dur-1: .18s;
+  --dur-2: .28s;
+  --dur-3: .45s;
+
+  color-scheme: dark;
+}
+
+/* ------------------------------ Light Theme ------------------------------ */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: linear-gradient(180deg,#f9fbff 0%,#e8efff 100%);
+  --surface-1: rgba(255,255,255,0.9);
+  --surface-2: rgba(0,0,0,0.08);
+  --surface-3: rgba(0,0,0,0.15);
+  --border: rgba(0,0,0,0.1);
+  --text-100: #0a1020;
+  --text-200: #1c233b;
+  --text-400: #4b4f68;
+  --text-600: #6a6d82;
+  --accent: #5c7cff;
+  --accent-soft: rgba(92,124,255,.25);
+  --shadow: 0 8px 28px rgba(0,0,0,.15);
+}
+
+/* ------------------------------ Reset ------------------------------ */
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+@media (max-width: 480px) { html { font-size: 15px; } }
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text-100);
+  font: 400 16px/1.65 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0.05px;
+  transition: background .4s var(--ease-out), color .3s var(--ease-out);
+}
+
+/* Global font override */
+:where(body, button, input, select, textarea, code, kbd) {
+  font-family: var(--font-sans) !important;
+}
+
+/* ------------------------------ Accessibility ------------------------------ */
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+.vis-hidden { visibility: hidden !important; }
+[hidden] { display: none !important; }
+
+/* Focus outline only when using keyboard */
+.user-is-tabbing button:focus,
+.user-is-tabbing a:focus,
+.user-is-tabbing input:focus,
+.user-is-tabbing textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-color: var(--accent);
+}
+
+/* ------------------------------ Containers ------------------------------ */
+.container {
+  max-width: var(--container);
+  margin-inline: auto;
+  padding-inline: clamp(var(--space-4), 4vw, var(--space-8));
+  padding-block: var(--space-8);
+}
+
+/* ------------------------------ Links ------------------------------ */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--dur-2) var(--ease-out), opacity var(--dur-2) var(--ease-out);
+}
+a:hover { opacity: .85; }
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: .4rem;
+}
+
+/* ------------------------------ Typography ------------------------------ */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-100);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+h1 { font-weight: 800; font-size: clamp(2rem,3.5vw,3rem); }
+h2 { font-size: clamp(1.45rem,2.5vw,2rem); }
+h3 { font-size: clamp(1.2rem,2vw,1.6rem); }
+p { color: var(--text-200); line-height: 1.65; }
+small, .muted { color: var(--text-600); font-size: .9rem; }
+
+/* Code & Preformatted */
+code, kbd, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: .95em;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text-200);
+  border-radius: var(--radius-sm);
+  padding: .15rem .35rem;
+}
+pre {
+  padding: var(--space-4);
+  overflow: auto;
+  line-height: 1.55;
+}
+
+/* ------------------------------ Forms & Buttons ------------------------------ */
+button {
+  font: 600 1rem/1 var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .7rem 1rem;
+  color: #0a1020;
+  background: linear-gradient(135deg,#6ea8fe,#9f78ff);
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: var(--radius);
+  box-shadow: 0 0 20px rgba(110,168,254,.25);
+  cursor: pointer;
+  transition: transform var(--dur-1) ease, box-shadow var(--dur-2) ease, opacity var(--dur-2) ease;
+}
+button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(110,168,254,.35); }
+button:active { transform: translateY(0); }
+button:disabled { opacity: .55; cursor: not-allowed; }
+
+input, select, textarea {
+  font: 500 1rem/1.2 var(--font-sans);
+  color: var(--text-100);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: .6rem .8rem;
+  transition: box-shadow var(--dur-2) var(--ease-out),
+              border-color var(--dur-2) var(--ease-out),
+              background var(--dur-2) var(--ease-out);
+}
+input::placeholder, textarea::placeholder { color: var(--text-600); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  box-shadow: var(--focus);
+  border-color: var(--accent);
+}
+label {
+  color: var(--text-200);
+  font-weight: 600;
+  display: inline-block;
+  margin-block-end: .35rem;
+}
+
+/* Field groups */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  margin-block: .75rem;
+}
+
+/* ------------------------------ Layout ------------------------------ */
+section, .card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-8);
+  box-shadow: var(--shadow);
+  transition: transform var(--dur-3) var(--ease-out),
+              box-shadow var(--dur-3) var(--ease-out);
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 48px rgba(0,0,0,.45);
+}
+.card + .card { margin-top: var(--space-6); }
+
+header, nav {
+  backdrop-filter: saturate(130%) blur(10px);
+  border-bottom: 1px solid var(--surface-2);
+}
+footer {
+  color: var(--text-600);
+  border-top: 1px solid var(--surface-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+
+/* ------------------------------ Tables ------------------------------ */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+thead th {
+  text-align: left;
+  font-weight: 700;
+  color: var(--text-200);
+  background: rgba(255,255,255,.06);
+}
+th, td {
+  padding: .65rem .75rem;
+  border-bottom: 1px solid var(--surface-2);
+}
+tbody tr:hover { background: rgba(255,255,255,.04); }
+
+/* ------------------------------ Utilities ------------------------------ */
+.flex { display: flex; }
+.grid { display: grid; gap: var(--space-4); }
+.center { display: grid; place-items: center; }
+.rounded { border-radius: var(--radius) !important; }
+.rounded-sm { border-radius: var(--radius-sm) !important; }
+
+.text-muted { color: var(--text-600) !important; }
+.text-secondary { color: var(--text-400) !important; }
+.text-accent { color: var(--accent) !important; }
+
+.mt-0 { margin-top: 0 !important; }
+.mt-4 { margin-top: var(--space-4) !important; }
+.mt-6 { margin-top: var(--space-6) !important; }
+.mt-8 { margin-top: var(--space-8) !important; }
+.mb-4 { margin-bottom: var(--space-4) !important; }
+.p-0 { padding: 0 !important; }
+.p-4 { padding: var(--space-4) !important; }
+.p-6 { padding: var(--space-6) !important; }
+
+/* ------------------------------ Motion & Reduced Motion ------------------------------ */
+:focus-visible { outline: none; box-shadow: var(--focus); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------ Print ------------------------------ */
+@media print {
+  *, *::before, *::after {
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+  a { text-decoration: underline; }
+  header, nav, footer { display: none !important; }
+  section, .card { border: 1px solid #000 !important; }
+}

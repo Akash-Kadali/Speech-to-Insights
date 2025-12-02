@@ -26,7 +26,8 @@ import logging
 from typing import List, Dict, Any, Tuple, Optional, Iterable
 
 logger = logging.getLogger("pii_detector")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
 # Optional externals
 try:
@@ -71,16 +72,25 @@ if _spacy_available:
 _REGEX_PATTERNS: List[Tuple[str, re.Pattern, float]] = [
     ("EMAIL", re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"), 0.95),
     # phone-ish (permissive)
-    ("PHONE", re.compile(r"(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}"), 0.7),
+    ("PHONE", re.compile(r"(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}"), 0.70),
     ("SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), 0.98),
     # credit-card like (very permissive — redact carefully)
-    ("CREDIT_CARD", re.compile(r"\b(?:\d[ -]*?){13,19}\b"), 0.6),
-    ("IP_ADDRESS", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), 0.9),
-    ("URL", re.compile(r"https?://[^\s]+|www\.[^\s]+"), 0.9),
+    ("CREDIT_CARD", re.compile(r"\b(?:\d[ -]*?){13,19}\b"), 0.60),
+    ("IP_ADDRESS", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), 0.90),
+    ("URL", re.compile(r"https?://[^\s]+|www\.[^\s]+"), 0.90),
+    # Very permissive driver license-ish pattern (low confidence)
     ("US_DRIVER_LICENSE", re.compile(r"\b[A-Z]{1,2}\d{4,8}\b"), 0.35),
 ]
 
 _DEFAULT_REPLACEMENT = "[REDACTED]"
+
+# Lazy AWS Comprehend client
+def _get_comprehend_client():
+    if not _boto3_available:
+        raise RuntimeError("boto3 not available in this environment")
+    if AWS_REGION:
+        return boto3.client("comprehend", region_name=AWS_REGION)
+    return boto3.client("comprehend")
 
 
 # --- AWS Comprehend helper --------------------------------------------------
@@ -90,7 +100,7 @@ def _comprehend_detect_pii(text: str) -> List[Dict[str, Any]]:
     if not _boto3_available:
         raise RuntimeError("boto3 not available")
 
-    client = boto3.client("comprehend", region_name=AWS_REGION) if AWS_REGION else boto3.client("comprehend")
+    client = _get_comprehend_client()
     try:
         resp = client.detect_pii_entities(Text=text, LanguageCode="en")
         entities = resp.get("Entities", []) or []
@@ -108,7 +118,7 @@ def _comprehend_detect_pii(text: str) -> List[Dict[str, Any]]:
             })
         return out
     except (BotoCoreError, ClientError) as exc:
-        logger.exception("Comprehend detect_pii_entities failed")
+        logger.exception("Comprehend detect_pii_entities failed: %s", exc)
         raise RuntimeError(f"Comprehend error: {exc}") from exc
 
 
@@ -116,7 +126,12 @@ def _comprehend_detect_pii(text: str) -> List[Dict[str, Any]]:
 def _spacy_detect_pii(text: str) -> List[Dict[str, Any]]:
     if not _spacy_available or _spacy_nlp is None:
         return []
-    doc = _spacy_nlp(text)
+    try:
+        doc = _spacy_nlp(text)
+    except Exception:
+        logger.exception("spaCy model failed to process text")
+        return []
+
     out: List[Dict[str, Any]] = []
     for ent in doc.ents:
         mapped_type = ent.label_
@@ -131,7 +146,7 @@ def _spacy_detect_pii(text: str) -> List[Dict[str, Any]]:
             mapped_type = "MONEY"
         out.append({
             "type": mapped_type,
-            "score": 0.6,
+            "score": 0.60,
             "start": ent.start_char,
             "end": ent.end_char,
             "text": ent.text,
@@ -146,6 +161,9 @@ def _regex_detect(text: str) -> List[Dict[str, Any]]:
     for label, pattern, confidence in _REGEX_PATTERNS:
         for m in pattern.finditer(text):
             s, e = m.start(), m.end()
+            # sanity: ignore zero-length
+            if e <= s:
+                continue
             entities.append({
                 "type": label,
                 "score": float(confidence),
@@ -182,6 +200,7 @@ def _merge_entities(primary: Iterable[Dict[str, Any]], secondary: Iterable[Dict[
             continue
         overlap = False
         for os, oe in occupied:
+            # overlap if ranges intersect
             if not (e <= os or s >= oe):
                 overlap = True
                 break
@@ -189,6 +208,7 @@ def _merge_entities(primary: Iterable[Dict[str, Any]], secondary: Iterable[Dict[
             accepted.append(ent)
             occupied.append((s, e))
 
+    # Return sorted by start for readability
     accepted.sort(key=lambda x: x["start"])
     return accepted
 
@@ -217,6 +237,7 @@ def detect_pii(text: str) -> Dict[str, Any]:
         except Exception:
             logger.exception("spaCy detection failed; continuing")
 
+    # Merge: regex first then cloud/ner results (merge routine prefers higher-scoring, longer spans)
     merged = _merge_entities(regex_entities, comprehend_entities + spacy_entities)
 
     counts: Dict[str, int] = {}
@@ -241,12 +262,13 @@ def _mask_keep_last(fragment: str, keep_last: int, replace_with: str) -> str:
     """
     Replace all but the last keep_last characters with replace_with (single token).
     If keep_last <= 0 returns replace_with.
+    If fragment shorter than keep_last, return replace_with + fragment (so some context is preserved).
     """
     if keep_last <= 0:
         return replace_with
-    # If fragment shorter than keep_last, keep as-is for safety
+    # If fragment shorter than keep_last, keep the fragment but still prefix with replace token
     if len(fragment) <= keep_last:
-        return replace_with
+        return replace_with + fragment
     return replace_with + fragment[-keep_last:]
 
 

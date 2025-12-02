@@ -17,7 +17,7 @@ Notes:
 
 import os
 import importlib
-from typing import List, Iterable
+from typing import List
 
 import numpy as np
 import pytest
@@ -150,11 +150,12 @@ def test_batch_behavior_and_shapes():
     if isinstance(batch_out, np.ndarray):
         arr = batch_out
     else:
-        # Accept generators/iterables too
-        if isinstance(batch_out, Iterable):
-            arr = np.asarray([_to_ndarray(x) for x in batch_out], dtype=float)
-        else:
-            pytest.fail("embed_batch returned unexpected type: %s" % type(batch_out))
+        # Accept generators/iterables too by trying to coerce to a list
+        try:
+            seq = list(batch_out)
+        except TypeError:
+            pytest.fail("embed_batch returned unexpected non-iterable type: %s" % type(batch_out))
+        arr = np.asarray([_to_ndarray(x) for x in seq], dtype=float)
 
     assert arr.ndim == 2, f"Batch embeddings must be 2-D (n x dim). Got shape {arr.shape}"
     n, d = arr.shape
@@ -205,7 +206,15 @@ def test_batch_consistency_with_single_calls():
     """Embedding a batch should be consistent with calling the single-item API repeatedly."""
     texts = ["one", "two", "three", "four"]
     batch = embed_batch_fn(texts)
-    batch_arr = np.asarray([_to_ndarray(x) for x in batch], dtype=float)
+    # coerce batch to array safely
+    if isinstance(batch, np.ndarray):
+        batch_arr = batch.astype(float)
+    else:
+        try:
+            seq = list(batch)
+        except TypeError:
+            pytest.fail("embed_batch returned unexpected non-iterable type: %s" % type(batch))
+        batch_arr = np.asarray([_to_ndarray(x) for x in seq], dtype=float)
 
     singles = np.asarray([_to_ndarray(embed_fn(t)) for t in texts], dtype=float)
     assert batch_arr.shape == singles.shape, "Batch and repeated single calls produced different shapes"

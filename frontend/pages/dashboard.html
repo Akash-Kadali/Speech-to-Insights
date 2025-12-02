@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Speech to Insights | Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Dashboard for Speech to Insights — quick overview of sessions, uploads, and system health." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
+
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Theme (swappable by JS) -->
+  <link id="theme-link" rel="stylesheet" href="/css/theme-light.css" />
+</head>
+<body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">STI</div>
+      <div class="brand-text">
+        <h2>Dashboard</h2>
+        <p>Overview</p>
+      </div>
+    </div>
+
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html" class="active" aria-current="page">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false">
+      Toggle Theme
+    </button>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="dashboard-title">
+    <div class="main-inner">
+      <header class="page-header">
+        <h1 id="dashboard-title" class="page-title">Overview</h1>
+        <p class="page-subtitle">Quick snapshot of recent activity, uploads, and system status.</p>
+      </header>
+
+      <!-- KPI ROW -->
+      <section class="kpi-row" role="region" aria-label="Key metrics">
+        <div class="card kpi">
+          <div class="kpi-value" id="kpi-sessions">—</div>
+          <div class="kpi-label">Total Sessions</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="kpi-value" id="kpi-uploads">—</div>
+          <div class="kpi-label">Uploads (last 7d)</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="kpi-value" id="kpi-processed">—</div>
+          <div class="kpi-label">Processed</div>
+        </div>
+
+        <div class="card kpi">
+          <div class="kpi-value" id="kpi-errors">—</div>
+          <div class="kpi-label">Errors</div>
+        </div>
+      </section>
+
+      <!-- RECENT SESSIONS + UPLOAD -->
+      <section class="card" aria-labelledby="recent-heading">
+        <div class="card-grid">
+          <div>
+            <h2 id="recent-heading">Recent Sessions</h2>
+            <p class="muted">Latest transcripts and summaries.</p>
+            <ul id="recent-sessions" class="list subtle" aria-live="polite">
+              <!-- Populated by JS -->
+            </ul>
+          </div>
+
+          <div>
+            <h2 id="quick-upload-heading">Quick Upload</h2>
+            <p class="muted">Drop a file to test the pipeline (demo presign/upload simulated).</p>
+            <form id="upload-form" class="field" novalidate>
+              <label for="upload-file">Select file</label>
+              <input id="upload-file" data-upload type="file" aria-describedby="upload-hint" />
+              <div id="upload-hint" class="muted">Accepted: .wav, .mp3 (demo only)</div>
+              <div class="actions" style="margin-top:8px;">
+                <button id="upload-trigger" data-upload-trigger="upload-file" class="cta-primary" type="button">Upload</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHARTS -->
+      <section class="card" aria-labelledby="charts-heading">
+        <h2 id="charts-heading">Activity Charts</h2>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3 class="chart-title">Sessions by Day</h3>
+            <canvas id="sessions-chart" width="600" height="240">Canvas not supported</canvas>
+          </div>
+
+          <div class="chart-card">
+            <h3 class="chart-title">Top Topics</h3>
+            <canvas id="topics-chart" width="600" height="240">Canvas not supported</canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- PROCESSING QUEUE -->
+      <section class="card" aria-labelledby="queue-heading">
+        <h2 id="queue-heading">Processing Queue</h2>
+        <p class="muted">Current queue status (demo)</p>
+        <ul id="queue-list" class="list subtle" aria-live="polite" aria-atomic="true">
+          <!-- Populated by admin.js or fallback -->
+        </ul>
+      </section>
+
+      <!-- SYSTEM STATUS -->
+      <section class="card" aria-labelledby="status-heading">
+        <h2 id="status-heading">System Status</h2>
+        <ul class="list subtle">
+          <li>Backend: <strong id="status-backend">Unknown</strong></li>
+          <li>Search: <strong id="status-search">Unknown</strong></li>
+          <li>Last ingest: <strong id="status-last">—</strong></li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
+  </footer>
+
+  <!-- Toast area -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+
+  <!-- Scripts (deferred) -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/admin.js"></script>
+  <script defer src="/js/analytics.js"></script>
+
+  <!-- Lightweight inline behavior & fallbacks -->
+  <script>
+    (function () {
+      // small helpers
+      function setText(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
+      function renderList(id, items) {
+        var ul = document.getElementById(id); if (!ul) return;
+        ul.innerHTML = '';
+        if (!items || items.length === 0) {
+          var li = document.createElement('li'); li.className = 'muted'; li.textContent = 'None'; ul.appendChild(li); return;
+        }
+        items.forEach(function (it) { var li = document.createElement('li'); li.textContent = it; ul.appendChild(li); });
+      }
+
+      function safeInit() {
+        // showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var t = document.getElementById('toast');
+              if (!t) { alert(message); return; }
+              t.textContent = message;
+              t.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { t.classList.remove('visible'); }, timeout);
+            } catch (e) { console.warn('toast fallback', e); alert(message); }
+          };
+        }
+
+        // Theme restore (best-effort)
+        try {
+          var themeLink = document.getElementById('theme-link');
+          var stored = localStorage.getItem('sti-theme');
+          if (themeLink && stored) themeLink.setAttribute('href', stored);
+        } catch (e) {}
+
+        // Wire quick upload button to file input (if main.js didn't)
+        var uploadInput = document.getElementById('upload-file');
+        var uploadTrigger = document.getElementById('upload-trigger');
+        if (uploadInput && uploadTrigger && !uploadTrigger.__bound) {
+          uploadTrigger.addEventListener('click', function () {
+            if (!uploadInput.files || !uploadInput.files.length) {
+              window.showToast('Choose a file to upload', 1800); return;
+            }
+            // Use STI upload helper if available
+            if (window.sti && typeof window.sti.uploadFile === 'function') {
+              uploadTrigger.disabled = true;
+              window.sti.uploadFile(uploadInput.files[0]).then(function (res) {
+                uploadTrigger.disabled = false;
+                if (res && res.ok) { window.showToast('Upload succeeded'); }
+                else { window.showToast('Upload failed'); }
+              }).catch(function (err) { uploadTrigger.disabled = false; window.showToast('Upload error'); });
+              return;
+            }
+            // fallback: simulate progress
+            window.showToast('Upload (simulated) started', 1200);
+            setTimeout(function () {
+              window.showToast('Upload (simulated) complete', 1400);
+              // add to recent sessions list as demo
+              var recents = ['meeting_demo_' + new Date().toISOString().slice(0,19).replace('T','_') + '.mp3 — processing'];
+              renderList('recent-sessions', recents);
+            }, 900);
+          });
+          uploadTrigger.__bound = true;
+        }
+
+        // Populate KPI placeholders
+        setText('kpi-sessions', '12');
+        setText('kpi-uploads', '4');
+        setText('kpi-processed', '10');
+        setText('kpi-errors', '0');
+
+        // Recent sessions placeholder
+        renderList('recent-sessions', [
+          'lecture_2025-11-28 — completed',
+          'team_meeting_2025-11-29 — processing',
+          'sync_2025-11-30 — queued'
+        ]);
+
+        // Queue placeholder (if admin.js didn't)
+        if (!document.getElementById('queue-list').children.length) {
+          renderList('queue-list', ['meeting_2025-11-29.mp3 — queued']);
+        }
+
+        // System status placeholders
+        setText('status-backend', 'OK (demo)');
+        setText('status-search', 'OK (demo)');
+        setText('status-last', new Date().toISOString().slice(0,19).replace('T',' '));
+
+        // Placeholder charts if analytics.js didn't render them
+        function drawPlaceholder(canvasId, text) {
+          var c = document.getElementById(canvasId);
+          if (!c || !c.getContext) return;
+          var ctx = c.getContext('2d');
+          ctx.clearRect(0, 0, c.width, c.height);
+          ctx.font = '14px sans-serif';
+          ctx.fillStyle = '#666';
+          ctx.textAlign = 'center';
+          ctx.fillText(text, c.width / 2, c.height / 2);
+        }
+        drawPlaceholder('sessions-chart', 'Sessions by day — placeholder');
+        drawPlaceholder('topics-chart', 'Top topics — placeholder');
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeInit);
+      else safeInit();
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">JavaScript is disabled. Dashboard will display limited information.</div>
+  </noscript>
+</body>
+</html>
