@@ -1,20 +1,19 @@
-"""
-backend/app.py
-
-Main entrypoint for the speech_to_insights backend.
-
-Purpose:
-- Expose a single FastAPI application object named `app` so tests and deployment
-  frameworks can import `backend.app:app`.
-- Re-export the routes from backend.routes.
-- Provide a simple `__main__` block for local development.
-
-Design notes:
-- Keeps app creation lightweight but adds a create_app factory to allow tests to
-  customize startup behavior.
-- Loads .env in local dev if present (non-destructive).
-- Adds basic startup/shutdown logging hooks.
-"""
+# backend/app.py
+#
+# Main entrypoint for the speech_to_insights backend.
+#
+# Purpose:
+# - Expose a single FastAPI application object named `app` so tests and deployment
+#   frameworks can import `backend.app:app`.
+# - Re-export the routes from backend.routes.
+# - Provide a simple `__main__` block for local development.
+#
+# Design notes:
+# - Keeps app creation lightweight but adds a create_app factory to allow tests to
+#   customize startup behavior.
+# - Loads .env in local dev if present (non-destructive).
+# - Adds basic startup/shutdown logging hooks.
+#
 
 from __future__ import annotations
 
@@ -82,7 +81,7 @@ def create_app(title: Optional[str] = None, description: Optional[str] = None) -
     )
 
     # Serve frontend static pages at root for local demos if folder exists
-    frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "pages")
+    frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
     if os.path.isdir(frontend_dir):
         try:
             app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
@@ -132,6 +131,21 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     workers = int(os.getenv("UVICORN_WORKERS", "1"))
     log_level = os.getenv("LOG_LEVEL", "info")
-    # Uvicorn's programmatic interface runs the server in-process; for dev we enable reload when requested.
+    # Uvicorn's programmatic interface doesn't reliably accept `workers` in every version.
+    # Use CLI-style invocation when multiple workers are requested and reload is disabled.
     reload_flag = os.getenv("UVICORN_RELOAD", "true").lower() in ("1", "true", "yes")
-    uvicorn.run("backend.app:app", host=host, port=port, reload=reload_flag, log_level=log_level, workers=workers)
+
+    if workers > 1 and not reload_flag:
+        # spawn uvicorn via subprocess to ensure workers are honored
+        import shlex
+        import subprocess
+
+        cmd = f"{shlex.quote('uvicorn')} backend.app:app --host {shlex.quote(host)} --port {port} --log-level {shlex.quote(log_level)} --workers {workers}"
+        if reload_flag:
+            cmd += " --reload"
+        logger.info("Starting uvicorn (subprocess): %s", cmd)
+        subprocess.run(cmd, check=True, shell=True)
+    else:
+        # single-process run (safe for reload mode)
+        logger.info("Starting uvicorn (in-process) host=%s port=%d reload=%s", host, port, reload_flag)
+        uvicorn.run("backend.app:app", host=host, port=port, reload=reload_flag, log_level=log_level)

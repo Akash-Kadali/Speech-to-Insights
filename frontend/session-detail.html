@@ -1,94 +1,202 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Session Detail</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Session detail: transcript, highlights and metadata for a single meeting." />
+  <meta name="author" content="Sri Akash Kadali" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Session</h2>
-        <p>Transcript &amp; highlights.</p>
+        <p class="muted">Transcript &amp; highlights</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html" class="active">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html" class="active" aria-current="page">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONSOLE AREA -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="session-title">
     <div class="main-inner">
-
       <!-- HEADER (filled by JS) -->
       <header class="page-header">
         <h1 class="page-title" id="session-title">Session title</h1>
-        <p class="page-subtitle" id="session-meta">
+        <p class="page-subtitle" id="session-meta" aria-live="polite" aria-atomic="true">
           <!-- JS will fill: date · duration · speakers -->
         </p>
       </header>
 
       <!-- HIGHLIGHTS -->
-      <section class="card">
-        <h2>Key Highlights</h2>
+      <section class="card" aria-labelledby="highlights-heading">
+        <h2 id="highlights-heading">Key Highlights</h2>
         <p class="muted">
           Automatically extracted summary of the main decisions, risks, and action items.
         </p>
-        <ul id="session-highlights" class="list subtle">
-          <!-- Filled by sessions.js -->
+        <ul id="session-highlights" class="list subtle" role="list" aria-live="polite" aria-atomic="true">
+          <!-- Filled by /js/sessions.js or fallback script -->
         </ul>
       </section>
 
       <!-- TRANSCRIPT -->
-      <section class="card">
-        <h2>Transcript</h2>
+      <section class="card" aria-labelledby="transcript-heading">
+        <h2 id="transcript-heading">Transcript</h2>
         <p class="muted">
           Each line is tagged with the speaker to make it easy to skim the conversation.
         </p>
-        <div id="transcript" class="transcript">
-          <!-- Filled by sessions.js -->
+        <div id="transcript" class="transcript" role="region" aria-label="Session transcript" tabindex="0">
+          <!-- Filled by /js/sessions.js or fallback script -->
         </div>
       </section>
-
     </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
   <!-- Toast Notification -->
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status" class="toast-container" hidden></div>
 
-  <!-- JS paths fixed -->
-  <script src="js/main.js"></script>
-  <script src="js/sessions.js"></script>
+  <!-- Primary JS (deferred so DOM is available). -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/sessions.js"></script>
+
+  <!-- Defensive inline script: light fallbacks so missing external scripts won't break page -->
+  <script>
+    (function () {
+      'use strict';
+
+      function ensureToast() {
+        if (typeof window.showToast === 'function') return;
+        window.showToast = function (message, timeout) {
+          try {
+            var toast = document.getElementById('toast');
+            if (!toast) { try { console.log('TOAST:', message); } catch (e) {} return; }
+            toast.hidden = false;
+            toast.textContent = String(message || '');
+            toast.classList.add('visible');
+            timeout = typeof timeout === 'number' ? timeout : 3000;
+            setTimeout(function () { toast.classList.remove('visible'); toast.hidden = true; }, timeout);
+          } catch (e) {
+            try { alert(message); } catch (ex) {}
+          }
+        };
+      }
+
+      function renderPlaceholders() {
+        var titleEl = document.getElementById('session-title');
+        var metaEl = document.getElementById('session-meta');
+        var highlightsEl = document.getElementById('session-highlights');
+        var transcriptEl = document.getElementById('transcript');
+
+        if (titleEl && titleEl.textContent.trim() === 'Session title') {
+          titleEl.textContent = 'Sample Session — Demo Data';
+        }
+
+        if (metaEl && metaEl.textContent.trim() === '') {
+          metaEl.textContent = 'Jan 01, 2025 · 42m · Speakers: Alice, Bob';
+        }
+
+        if (highlightsEl && highlightsEl.children.length === 0) {
+          var li1 = document.createElement('li');
+          li1.textContent = 'Decision: Approve Q1 budget allocation to Product A.';
+          highlightsEl.appendChild(li1);
+          var li2 = document.createElement('li');
+          li2.textContent = 'Action: Alice to prepare vendor shortlist by next meeting.';
+          highlightsEl.appendChild(li2);
+        }
+
+        if (transcriptEl && transcriptEl.children.length === 0) {
+          var p = document.createElement('p');
+          p.className = 'muted';
+          p.textContent = 'Transcript content is not available — this is a demo placeholder. Upload or seed demo data to view a real transcript.';
+          transcriptEl.appendChild(p);
+        }
+      }
+
+      function safeInit() {
+        ensureToast();
+
+        // Theme toggle fallback + restore persisted preference
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
+          themeToggle.addEventListener('click', function () {
+            try {
+              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              themeLink.setAttribute('href', next);
+              themeToggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle fallback error', e); }
+          }, { passive: true });
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+          themeToggle.__fallbackAttached = true;
+        }
+
+        // If sessions.js or equivalent hasn't populated the page, show placeholders
+        try {
+          var highlightsEl = document.getElementById('session-highlights') || null;
+          var transcriptEl = document.getElementById('transcript') || null;
+          var sessionsRendered = !!(window.sessionsRendered || (highlightsEl && highlightsEl.children.length > 0) || (transcriptEl && transcriptEl.children.length > 0));
+          if (!sessionsRendered) renderPlaceholders();
+        } catch (e) {
+          console.warn('sessions fallback error', e);
+          renderPlaceholders();
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Session details require JavaScript to display dynamic content.
+    </div>
+  </noscript>
 </body>
 </html>

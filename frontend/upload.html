@@ -1,60 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Upload</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Upload meetings to Speech to Insights — demo frontend for MSML 650 term project." />
+  <meta name="author" content="Sri Akash Kadali" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme (defaults to light) -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Upload</h2>
         <p>Ingest new meetings.</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html" class="active">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html" class="active" aria-current="page">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONSOLE AREA -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="upload-page-title">
     <div class="main-inner">
       <header class="page-header">
-        <h1 class="page-title">Upload a Meeting</h1>
+        <h1 id="upload-page-title" class="page-title">Upload a Meeting</h1>
         <p class="page-subtitle">
           Upload an audio file or transcript, and the system will process it into searchable insights.
         </p>
       </header>
 
       <!-- Upload form -->
-      <section class="card">
-        <form id="upload-form">
+      <section class="card" aria-labelledby="upload-heading">
+        <h2 id="upload-heading" class="visually-hidden">Upload form</h2>
+
+        <form id="upload-form" name="upload-form" novalidate>
           <div class="field">
             <label for="meeting-title">Meeting title</label>
             <input
@@ -63,7 +69,9 @@
               name="title"
               placeholder="Sprint Planning – Week 5"
               required
-            >
+              aria-required="true"
+              autocomplete="off"
+            />
           </div>
 
           <div class="field">
@@ -73,19 +81,22 @@
               id="meeting-date"
               name="date"
               required
-            >
+              aria-required="true"
+            />
           </div>
 
           <div class="field">
-            <label for="file-input">Audio file or transcript</label>
+            <label for="upload-file">Audio file or transcript</label>
             <input
               type="file"
-              id="file-input"
+              id="upload-file"
               name="file"
+              data-upload
               accept=".mp3,.wav,.m4a,.txt,.pdf"
               required
-            >
-            <small>Supported formats: .mp3, .wav, .m4a, .txt, .pdf</small>
+              aria-required="true"
+            />
+            <small id="upload-hint">Supported formats: .mp3, .wav, .m4a, .txt, .pdf</small>
           </div>
 
           <div class="field">
@@ -95,39 +106,244 @@
               id="tags"
               name="tags"
               placeholder="roadmap, pricing, Q1 plan"
-            >
+              autocomplete="off"
+            />
           </div>
 
           <div class="actions">
-            <button type="submit" class="cta-primary">Upload &amp; Process</button>
+            <!-- upload-trigger wired to JS helpers (data-upload-trigger matches input id) -->
+            <button id="upload-trigger" data-upload-trigger="upload-file" class="cta-primary" type="button" aria-label="Upload and process">
+              Upload &amp; Process
+            </button>
             <button type="reset" class="cta-ghost">Clear</button>
           </div>
         </form>
       </section>
 
       <!-- Recent uploads -->
-      <section class="card">
-        <h2>Recent uploads</h2>
+      <section class="card" aria-labelledby="recent-heading">
+        <h2 id="recent-heading">Recent uploads</h2>
         <p class="muted">
-          This section will show the most recent files you uploaded in this session.
+          This section shows recent files uploaded in this browser session (demo only).
         </p>
-        <ul id="recent-uploads" class="list subtle">
-          <!-- Filled by upload.js -->
+        <ul id="recent-uploads" class="list subtle" role="list" aria-live="polite" aria-atomic="true">
+          <!-- Filled by /js/upload.js or fallback script -->
         </ul>
       </section>
     </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
   <!-- Toast Notification -->
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
 
-  <!-- JS paths fixed -->
-  <script src="js/main.js"></script>
-  <script src="js/upload.js"></script>
+  <!-- Scripts (deferred): toast, main, upload -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/upload.js"></script>
+
+  <!-- Defensive inline script: ensures theme, toast, and upload form work if external scripts are missing -->
+  <script>
+    (function () {
+      'use strict';
+
+      function ensureToast() {
+        if (typeof window.showToast === 'function') return;
+        window.showToast = function (message, timeout) {
+          try {
+            var toast = document.getElementById('toast');
+            if (!toast) { console.log('TOAST:', message); return; }
+            toast.hidden = false;
+            toast.textContent = String(message || '');
+            toast.classList.add('visible');
+            setTimeout(function () { toast.classList.remove('visible'); toast.hidden = true; }, typeof timeout === 'number' ? timeout : 3000);
+          } catch (e) {
+            try { console.log('TOAST (fallback):', message); } catch (_) {}
+          }
+        };
+      }
+
+      function renderRecent(items) {
+        var recentList = document.getElementById('recent-uploads');
+        if (!recentList) return;
+        recentList.innerHTML = '';
+        if (!items || items.length === 0) {
+          var li = document.createElement('li');
+          li.className = 'muted';
+          li.textContent = 'No uploads yet.';
+          recentList.appendChild(li);
+          return;
+        }
+        items.forEach(function (it) {
+          var li = document.createElement('li');
+          var label = it.title || it.filename || 'upload';
+          var date = it.date || it.uploadedAt || '';
+          li.textContent = label + (date ? (' · ' + date) : '') + (it.tags ? (' · ' + it.tags) : '');
+          recentList.appendChild(li);
+        });
+      }
+
+      function safeInit() {
+        ensureToast();
+
+        // Theme toggle fallback + restore persisted preference
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
+          themeToggle.addEventListener('click', function () {
+            try {
+              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              themeLink.setAttribute('href', next);
+              themeToggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle fallback error', e); }
+          }, { passive: true });
+
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+          themeToggle.__fallbackAttached = true;
+        }
+
+        // Restore recent uploads from localStorage if present
+        try {
+          var stored = localStorage.getItem('sti-recent-uploads');
+          if (stored) {
+            var parsed = JSON.parse(stored);
+            if (Array.isArray(parsed)) renderRecent(parsed);
+            else renderRecent([]);
+          } else {
+            renderRecent([]);
+          }
+        } catch (e) {
+          console.warn('Failed to restore recent uploads', e);
+          renderRecent([]);
+        }
+
+        var form = document.getElementById('upload-form');
+        var uploadTrigger = document.getElementById('upload-trigger');
+        var fileInput = document.getElementById('upload-file');
+
+        if (uploadTrigger && !uploadTrigger.__bound) {
+          uploadTrigger.addEventListener('click', function () {
+            // If upload.js exposes bindUploadForm/uploadFile behavior, prefer that
+            if (window.sti && typeof window.sti.uploadFile === 'function') {
+              // Basic validation before calling upload helper
+              var title = (document.getElementById('meeting-title') || {}).value || '';
+              var date = (document.getElementById('meeting-date') || {}).value || '';
+              if (!title.trim() || !date) {
+                window.showToast('Please provide title and date.', 2200);
+                return;
+              }
+              if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                window.showToast('Please choose a file to upload.', 2200);
+                return;
+              }
+              uploadTrigger.disabled = true;
+              window.sti.uploadFile(fileInput.files[0], { startWorkflow: true }).then(function (res) {
+                uploadTrigger.disabled = false;
+                if (res && res.ok) {
+                  // persist demo record
+                  try {
+                    var record = { title: title, date: date, tags: (document.getElementById('tags') || {}).value || '', filename: fileInput.files[0].name, uploadedAt: new Date().toISOString() };
+                    var recent = JSON.parse(localStorage.getItem('sti-recent-uploads') || '[]');
+                    recent.unshift(record);
+                    if (recent.length > 10) recent = recent.slice(0,10);
+                    localStorage.setItem('sti-recent-uploads', JSON.stringify(recent));
+                    renderRecent(recent);
+                  } catch (e) {}
+                  window.showToast('Upload succeeded', 1800);
+                  try { form.reset(); } catch (e) {}
+                } else {
+                  window.showToast('Upload failed: ' + ((res && res.error) || 'unknown'), 3000);
+                }
+              }).catch(function (err) {
+                uploadTrigger.disabled = false;
+                console.error('upload helper error', err);
+                window.showToast('Upload error', 3000);
+              });
+              return;
+            }
+
+            // fallback demo flow: reuse inline form handling below
+            if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+          }, { passive: true });
+          uploadTrigger.__bound = true;
+        }
+
+        // Inline fallback submit handler (used when upload.js isn't available)
+        if (form && !form.__handled) {
+          form.addEventListener('submit', function (e) {
+            // If triggered programmatically by uploadTrigger, e.isTrusted may be false — still handle
+            if (e && e.preventDefault) e.preventDefault();
+
+            var title = (document.getElementById('meeting-title') || {}).value || '';
+            var date = (document.getElementById('meeting-date') || {}).value || '';
+            var tags = (document.getElementById('tags') || {}).value || '';
+            var fileEl = document.getElementById('upload-file');
+
+            if (!title.trim() || !date || !fileEl || !fileEl.files || fileEl.files.length === 0) {
+              window.showToast('Please provide title, date, and a file to upload.', 2500);
+              return;
+            }
+
+            var file = fileEl.files[0];
+            var allowed = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/m4a', 'text/plain', 'application/pdf'];
+            var okType = allowed.indexOf(file.type) !== -1 || /\.(mp3|wav|m4a|txt|pdf)$/i.test(file.name);
+            if (!okType) {
+              window.showToast('Unsupported file type. Supported: .mp3, .wav, .m4a, .txt, .pdf', 3000);
+              return;
+            }
+
+            try {
+              var record = { title: title.trim(), date: date, tags: tags.trim(), filename: file.name, uploadedAt: new Date().toISOString() };
+              var recent = JSON.parse(localStorage.getItem('sti-recent-uploads') || '[]');
+              recent.unshift(record);
+              if (recent.length > 10) recent = recent.slice(0,10);
+              localStorage.setItem('sti-recent-uploads', JSON.stringify(recent));
+              renderRecent(recent);
+
+              window.showToast('File accepted and queued (demo).', 2200);
+              try { form.reset(); } catch (err) {}
+            } catch (err) {
+              console.error('Fallback upload error', err);
+              window.showToast('Upload failed (demo)', 2000);
+            }
+          });
+          form.__handled = true;
+        }
+
+        // Ensure placeholder exists if nothing rendered
+        var recentList = document.getElementById('recent-uploads');
+        if (recentList && recentList.children.length === 0) {
+          var placeholder = document.createElement('li');
+          placeholder.className = 'muted';
+          placeholder.textContent = 'No uploads yet.';
+          recentList.appendChild(placeholder);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Uploads and recent items require JavaScript.
+    </div>
+  </noscript>
 </body>
 </html>

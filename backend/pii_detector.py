@@ -1,20 +1,17 @@
+# backend/pii_detector.py
 """
-backend/pii_detector.py
+Upgraded, conservative PII detector for speech_to_insights.
 
-Upgraded, non-degraded PII detector for speech_to_insights.
-
-Features / improvements over prior version:
-- Same conservative regex coverage for EMAIL, PHONE, SSN, CREDIT_CARD, IP, URL, etc.
-- Better merging strategy: prefer higher-score and longer matches when resolving overlaps.
-- Optional AWS Comprehend integration (controlled by AWS_COMPREHEND_ENABLED).
+Features:
+- Conservative regex coverage for EMAIL, PHONE, SSN, CREDIT_CARD, IP, URL, etc.
+- Merge strategy prefers higher-score then longer spans when resolving overlaps.
+- Optional AWS Comprehend integration (AWS_COMPREHEND_ENABLED).
 - Optional spaCy NER integration (if spaCy + model available).
-- Extra utilities:
+- Public API:
     - detect_pii(text: str) -> dict
     - redact_pii(text: str, replace_with="[REDACTED]", preserve_last_n: dict = None) -> (str, dict)
-      preserve_last_n: optional map of entity type -> int to keep last N characters (useful for credit cards).
-    - detect_pii_batch(texts: List[str]) -> List[dict]
-- Clear, auditable reports with spans, source, and conservative confidence estimates.
-- Defensive: falls back to regex + spaCy when Comprehend fails; no network calls unless enabled.
+    - detect_pii_batch(texts: Iterable[str]) -> List[dict]
+- Defensive: no network calls unless explicitly enabled; falls back to local regex/spaCy.
 """
 
 from __future__ import annotations
@@ -23,11 +20,16 @@ import os
 import re
 import json
 import logging
+import uuid
 from typing import List, Dict, Any, Tuple, Optional, Iterable
 
 logger = logging.getLogger("pii_detector")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(ch)
 
 # Optional externals
 try:
@@ -108,14 +110,16 @@ def _comprehend_detect_pii(text: str) -> List[Dict[str, Any]]:
         for e in entities:
             begin = int(e.get("BeginOffset", 0))
             end = int(e.get("EndOffset", 0))
-            out.append({
-                "type": e.get("Type"),
-                "score": float(e.get("Score", 0.0)),
-                "start": begin,
-                "end": end,
-                "text": text[begin:end],
-                "source": "comprehend"
-            })
+            out.append(
+                {
+                    "type": e.get("Type"),
+                    "score": float(e.get("Score", 0.0)),
+                    "start": begin,
+                    "end": end,
+                    "text": text[begin:end],
+                    "source": "comprehend",
+                }
+            )
         return out
     except (BotoCoreError, ClientError) as exc:
         logger.exception("Comprehend detect_pii_entities failed: %s", exc)
@@ -144,14 +148,16 @@ def _spacy_detect_pii(text: str) -> List[Dict[str, Any]]:
             mapped_type = "ORG"
         elif ent.label_ in ("MONEY",):
             mapped_type = "MONEY"
-        out.append({
-            "type": mapped_type,
-            "score": 0.60,
-            "start": ent.start_char,
-            "end": ent.end_char,
-            "text": ent.text,
-            "source": "spacy"
-        })
+        out.append(
+            {
+                "type": mapped_type,
+                "score": 0.60,
+                "start": ent.start_char,
+                "end": ent.end_char,
+                "text": ent.text,
+                "source": "spacy",
+            }
+        )
     return out
 
 
@@ -164,14 +170,16 @@ def _regex_detect(text: str) -> List[Dict[str, Any]]:
             # sanity: ignore zero-length
             if e <= s:
                 continue
-            entities.append({
-                "type": label,
-                "score": float(confidence),
-                "start": int(s),
-                "end": int(e),
-                "text": m.group(0),
-                "source": "regex"
-            })
+            entities.append(
+                {
+                    "type": label,
+                    "score": float(confidence),
+                    "start": int(s),
+                    "end": int(e),
+                    "text": m.group(0),
+                    "source": "regex",
+                }
+            )
     return entities
 
 
@@ -244,12 +252,14 @@ def detect_pii(text: str) -> Dict[str, Any]:
     for e in merged:
         counts[e["type"]] = counts.get(e["type"], 0) + 1
 
-    return {
+    report = {
+        "id": str(uuid.uuid4().hex),
         "text": text,
         "length": len(text),
         "entities": merged,
-        "summary": {"counts": counts, "total": len(merged)}
+        "summary": {"counts": counts, "total": len(merged)},
     }
+    return report
 
 
 def detect_pii_batch(texts: Iterable[str]) -> List[Dict[str, Any]]:
@@ -266,14 +276,17 @@ def _mask_keep_last(fragment: str, keep_last: int, replace_with: str) -> str:
     """
     if keep_last <= 0:
         return replace_with
-    # If fragment shorter than keep_last, keep the fragment but still prefix with replace token
     if len(fragment) <= keep_last:
         return replace_with + fragment
     return replace_with + fragment[-keep_last:]
 
 
-def _redact_spanwise(text: str, entities: List[Dict[str, Any]], replace_with: str = _DEFAULT_REPLACEMENT,
-                     preserve_last_n: Optional[Dict[str, int]] = None) -> str:
+def _redact_spanwise(
+    text: str,
+    entities: List[Dict[str, Any]],
+    replace_with: str = _DEFAULT_REPLACEMENT,
+    preserve_last_n: Optional[Dict[str, int]] = None,
+) -> str:
     """
     Redact entity spans in text. preserve_last_n can specify per-entity-type ints to keep last N chars.
     Entities assumed non-overlapping and sorted by start (but function will sort to be safe).
@@ -301,20 +314,25 @@ def _redact_spanwise(text: str, entities: List[Dict[str, Any]], replace_with: st
     return "".join(pieces)
 
 
-def redact_pii(text: str, replace_with: str = _DEFAULT_REPLACEMENT,
-               preserve_last_n: Optional[Dict[str, int]] = None) -> Tuple[str, Dict[str, Any]]:
+def redact_pii(
+    text: str, replace_with: str = _DEFAULT_REPLACEMENT, preserve_last_n: Optional[Dict[str, int]] = None
+) -> Tuple[str, Dict[str, Any]]:
     """
     Detect and redact PII. preserve_last_n example: {"CREDIT_CARD": 4} to show last 4 digits.
     Returns (redacted_text, report).
     """
     report = detect_pii(text)
-    redacted = _redact_spanwise(text, report["entities"], replace_with=replace_with, preserve_last_n=preserve_last_n)
+    redacted = _redact_spanwise(
+        text, report["entities"], replace_with=replace_with, preserve_last_n=preserve_last_n
+    )
     return redacted, report
 
 
 # --- CLI -------------------------------------------------------------------
 def _cli():
     import argparse
+    import sys
+
     parser = argparse.ArgumentParser(description="PII detector / redactor (local).")
     parser.add_argument("input", nargs="?", help="Input text file or '-' for stdin (default stdin).")
     parser.add_argument("--redact", action="store_true", help="Print redacted text as well.")
@@ -323,7 +341,6 @@ def _cli():
     args = parser.parse_args()
 
     if not args.input or args.input == "-":
-        import sys
         text = sys.stdin.read()
     else:
         with open(args.input, "r", encoding="utf-8") as fh:

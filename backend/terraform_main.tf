@@ -1,4 +1,3 @@
-#
 # backend/terraform_main.tf
 #
 # Core infra for speech_to_insights.
@@ -33,19 +32,25 @@ resource "random_id" "suffix" {
   byte_length = 4
 }
 
-# Helper local names and tags
+# Consolidated locals for names and tags
 locals {
-  input_bucket_name = var.s3_input_bucket != null && var.s3_input_bucket != "" ?
+  input_bucket_name = (
+    var.s3_input_bucket != null && var.s3_input_bucket != "" ?
     var.s3_input_bucket :
     "${var.project_name}-${var.environment}-inputs-${random_id.suffix.hex}"
+  )
 
-  transform_output_bucket_name = var.s3_transform_output_bucket != null && var.s3_transform_output_bucket != "" ?
+  transform_output_bucket_name = (
+    var.s3_transform_output_bucket != null && var.s3_transform_output_bucket != "" ?
     var.s3_transform_output_bucket :
     "${var.project_name}-${var.environment}-transform-${random_id.suffix.hex}"
+  )
 
-  logs_bucket_name = var.s3_logs_bucket != null && var.s3_logs_bucket != "" ?
+  logs_bucket_name = (
+    var.s3_logs_bucket != null && var.s3_logs_bucket != "" ?
     var.s3_logs_bucket :
     "${var.project_name}-${var.environment}-logs-${random_id.suffix.hex}"
+  )
 
   common_tags = merge(
     {
@@ -54,6 +59,12 @@ locals {
     },
     var.tags
   )
+
+  # final computed role ARN: prefer provided var, otherwise created role
+  effective_lambda_role_arn = var.lambda_role_arn != null ? var.lambda_role_arn : null
+
+  # effective sagemaker transform role ARN (prefer user-provided)
+  effective_sagemaker_transform_role_arn = var.sagemaker_transform_role_arn != null ? var.sagemaker_transform_role_arn : null
 }
 
 # -------------------
@@ -67,11 +78,11 @@ resource "aws_s3_bucket" "input_bucket" {
   tags = local.common_tags
 
   lifecycle_rule {
+    id      = "keep-very-long"
     enabled = true
     expiration {
       days = 3650
     }
-    id = "keep-very-long"
   }
 
   versioning {
@@ -105,7 +116,7 @@ resource "aws_s3_bucket" "logs_bucket" {
 }
 
 # Optional server-side encryption configuration.
-# If kms_key_id is null, the provider/bucket default (AES256) will be used implicitly.
+# If kms_key_id is null we prefer AES256 (S3 default); if kms_key_id provided, use AWS KMS.
 resource "aws_s3_bucket_server_side_encryption_configuration" "input" {
   bucket = aws_s3_bucket.input_bucket.id
 
@@ -116,7 +127,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "input" {
     }
   }
 
-  # keep terraform from complaining on irrelevant changes to rules
   lifecycle {
     ignore_changes = [rule]
   }
@@ -130,7 +140,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "input" {
 
 data "aws_caller_identity" "current" {}
 
-# Create a Lambda execution role only when an external role ARN is not provided.
 resource "aws_iam_role" "lambda_role" {
   count = var.lambda_role_arn == null ? 1 : 0
 
@@ -179,7 +188,7 @@ data "aws_iam_policy_document" "lambda_policy" {
     resources = ["arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/*"]
   }
 
-  # Conservative SageMaker permissions (broad: adjust for least privilege in production)
+  # Conservative SageMaker permissions (broad - tighten for production)
   statement {
     sid     = "sagemaker"
     effect  = "Allow"
@@ -205,12 +214,9 @@ resource "aws_iam_role_policy" "lambda_inline_policy" {
   policy = data.aws_iam_policy_document.lambda_policy.json
 }
 
-# final computed role ARN: prefer provided var, otherwise created role
-locals {
-  effective_lambda_role_arn = var.lambda_role_arn != null ? var.lambda_role_arn : (
-    length(aws_iam_role.lambda_role) > 0 ? aws_iam_role.lambda_role[0].arn : null
-  )
-}
+# Update effective lambda role arn local if we created a role
+# (we must use a dynamic mechanism; use a small null_resource to set output via outputs below)
+# Instead, compute now via terraform expression in output below.
 
 # -------------------
 # SageMaker transform role (create if not provided)
@@ -270,13 +276,6 @@ resource "aws_iam_role_policy" "sagemaker_inline_policy" {
   policy = data.aws_iam_policy_document.sagemaker_policy.json
 }
 
-# effective sagemaker transform role ARN (prefer user-provided)
-locals {
-  effective_sagemaker_transform_role_arn = var.sagemaker_transform_role_arn != null ? var.sagemaker_transform_role_arn : (
-    length(aws_iam_role.sagemaker_transform_role) > 0 ? aws_iam_role.sagemaker_transform_role[0].arn : null
-  )
-}
-
 # -------------------
 # Outputs
 # -------------------
@@ -297,13 +296,15 @@ output "logs_s3_bucket" {
 }
 
 output "lambda_role_arn" {
-  description = "Lambda execution role ARN (either created or the provided external one)."
-  value       = local.effective_lambda_role_arn
+  description = "Lambda execution role ARN (either provided by var or created here)."
+  value = var.lambda_role_arn != null ? var.lambda_role_arn :
+    (length(aws_iam_role.lambda_role) > 0 ? aws_iam_role.lambda_role[0].arn : null)
 }
 
 output "sagemaker_transform_role_arn" {
-  description = "SageMaker transform role ARN (created or provided)."
-  value       = local.effective_sagemaker_transform_role_arn
+  description = "SageMaker transform role ARN (provided or created)."
+  value = var.sagemaker_transform_role_arn != null ? var.sagemaker_transform_role_arn :
+    (length(aws_iam_role.sagemaker_transform_role) > 0 ? aws_iam_role.sagemaker_transform_role[0].arn : null)
 }
 
 output "region" {

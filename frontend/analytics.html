@@ -1,70 +1,74 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Analytics</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Analytics dashboard for Speech to Insights — topic trends, speaker participation, and keyword patterns." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Skip link for keyboard users -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Analytics</h2>
-        <p>Trends &amp; patterns.</p>
+        <p class="muted">Trends &amp; patterns</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html">Sessions</a>
-      <a href="analytics.html" class="active">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html" class="active" aria-current="page">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONSOLE AREA -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
     <div class="main-inner">
-
       <!-- HEADER -->
       <header class="page-header">
-        <h1 class="page-title">Analytics Dashboard</h1>
-        <p class="page-subtitle">
+        <h1 id="page-title" class="page-title">Analytics Dashboard</h1>
+        <p class="page-subtitle muted">
           Explore topic trends, speaker participation, and keyword patterns across your meetings.
         </p>
       </header>
 
       <!-- FILTERS -->
-      <section class="card">
-        <div class="filters row">
+      <section class="card" aria-labelledby="filters-heading">
+        <h2 id="filters-heading" class="visually-hidden">Filters</h2>
+        <div class="filters row" role="region" aria-label="Analytics filters">
           <div class="field">
             <label for="analytics-date-from">From</label>
-            <input type="date" id="analytics-date-from">
+            <input type="date" id="analytics-date-from" name="analytics-date-from" />
           </div>
 
           <div class="field">
             <label for="analytics-date-to">To</label>
-            <input type="date" id="analytics-date-to">
+            <input type="date" id="analytics-date-to" name="analytics-date-to" />
           </div>
 
           <div class="field">
@@ -72,51 +76,199 @@
             <input
               type="text"
               id="analytics-tag"
+              name="analytics-tag"
               placeholder="roadmap, pricing, Q1 plan"
-            >
+              aria-label="Tag filter"
+            />
           </div>
 
-          <button id="analytics-refresh" class="cta-secondary small-btn">
-            Refresh
-          </button>
+          <div class="field">
+            <button id="analytics-refresh" class="cta-secondary small-btn" type="button" aria-label="Refresh analytics">Refresh</button>
+          </div>
         </div>
       </section>
 
-      <!-- TOPIC FREQUENCY -->
-      <section class="card">
-        <h2>Topic Frequency</h2>
-        <p class="muted">How often key topics appear across your uploaded sessions.</p>
-        <canvas id="topic-chart"></canvas>
-      </section>
+      <div class="grid two-up gap-lg">
+        <!-- TOPIC FREQUENCY -->
+        <section class="card" aria-labelledby="topic-frequency-heading">
+          <h2 id="topic-frequency-heading">Topic Frequency</h2>
+          <p class="muted">How often key topics appear across your uploaded sessions.</p>
+          <div class="chart-wrap" role="img" aria-label="Topic frequency chart">
+            <canvas id="topic-chart">Your browser does not support canvas. Topic chart unavailable.</canvas>
+          </div>
+        </section>
 
-      <!-- SPEAKER PARTICIPATION -->
-      <section class="card">
-        <h2>Speaker Participation</h2>
-        <p class="muted">Relative speaking time or number of turns per speaker.</p>
-        <canvas id="speaker-chart"></canvas>
-      </section>
+        <!-- SPEAKER PARTICIPATION -->
+        <section class="card" aria-labelledby="speaker-participation-heading">
+          <h2 id="speaker-participation-heading">Speaker Participation</h2>
+          <p class="muted">Relative speaking time or number of turns per speaker.</p>
+          <div class="chart-wrap" role="img" aria-label="Speaker participation chart">
+            <canvas id="speaker-chart">Your browser does not support canvas. Speaker chart unavailable.</canvas>
+          </div>
+        </section>
+      </div>
 
       <!-- WORD CLOUD -->
-      <section class="card">
-        <h2>Keyword Word Cloud</h2>
+      <section class="card" aria-labelledby="wordcloud-heading">
+        <h2 id="wordcloud-heading">Keyword Word Cloud</h2>
         <p class="muted">Most prominent keywords extracted from your conversations.</p>
-        <div id="wordcloud" class="wordcloud">
-          <!-- Filled dynamically by analytics.js -->
+        <div id="wordcloud" class="wordcloud" role="region" aria-label="Keyword word cloud">
+          <!-- Filled dynamically by analytics.js; fallback below if script missing -->
         </div>
       </section>
 
+      <!-- LEGEND / NOTES -->
+      <section class="card" aria-labelledby="notes-heading">
+        <h2 id="notes-heading">Notes</h2>
+        <ul class="list subtle">
+          <li>Charts are placeholders when no backend analytics are available.</li>
+          <li>Analytics endpoint paths can be customized via <code>window.STI</code> config.</li>
+        </ul>
+      </section>
     </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
-  <div id="toast" aria-live="polite"></div>
+  <!-- Toast -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- JS PATHS FIXED -->
-  <script src="js/main.js"></script>
-  <script src="js/analytics.js"></script>
+  <!-- Page scripts (defer so DOM is available). Include toast, main, analytics -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/analytics.js"></script>
+
+  <!-- Responsive canvas sizing + defensive fallbacks -->
+  <script>
+    (function () {
+      // Ensure canvases have a crisp drawing buffer matching devicePixelRatio
+      function sizeCanvas(id, minW, minH) {
+        var c = document.getElementById(id);
+        if (!c) return;
+        var rect = c.getBoundingClientRect();
+        var cssW = Math.max(minW || 320, Math.round(rect.width || 640));
+        var cssH = Math.max(minH || 120, Math.round(rect.height || Math.floor(cssW * 0.4)));
+        var ratio = window.devicePixelRatio || 1;
+        // set drawing buffer size
+        c.width = Math.floor(cssW * ratio);
+        c.height = Math.floor(cssH * ratio);
+        c.style.width = cssW + 'px';
+        c.style.height = cssH + 'px';
+      }
+
+      function safeInit() {
+        // size canvases early so analytics.js can draw crisply
+        sizeCanvas('topic-chart', 480, 240);
+        sizeCanvas('speaker-chart', 480, 240);
+
+        // showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var toast = document.getElementById('toast');
+              if (!toast) { alert(message); return; }
+              toast.textContent = message;
+              toast.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+            } catch (e) {
+              try { alert(message); } catch (_) {}
+            }
+          };
+        }
+
+        // Theme toggle fallback and restore saved theme
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
+          themeToggle.addEventListener('click', function () {
+            try {
+              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              themeLink.setAttribute('href', next);
+              themeToggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle fallback error', e); }
+          });
+          themeToggle.__fallbackAttached = true;
+        }
+        try {
+          var stored = localStorage.getItem('sti-theme');
+          if (stored && themeLink) themeLink.setAttribute('href', stored);
+        } catch (e) {}
+
+        // Analytics refresh fallback (no backend)
+        var refreshBtn = document.getElementById('analytics-refresh');
+        var topicCanvas = document.getElementById('topic-chart');
+        var speakerCanvas = document.getElementById('speaker-chart');
+        var wordcloud = document.getElementById('wordcloud');
+
+        function renderPlaceholderChart(canvas, text) {
+          if (!canvas || !canvas.getContext) return;
+          var ctx = canvas.getContext('2d');
+          // adjust for devicePixelRatio used when sizing
+          var ratio = window.devicePixelRatio || 1;
+          ctx.save();
+          ctx.scale(ratio, ratio);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.font = '16px sans-serif';
+          ctx.fillStyle = '#666';
+          ctx.textAlign = 'center';
+          var cssW = parseInt(canvas.style.width, 10) || (canvas.width / ratio);
+          var cssH = parseInt(canvas.style.height, 10) || (canvas.height / ratio);
+          ctx.fillText(text, cssW / 2, cssH / 2);
+          ctx.restore();
+          canvas.__renderedByAnalytics = true;
+        }
+
+        if (refreshBtn) {
+          if (!refreshBtn.__fallbackAttached) {
+            refreshBtn.addEventListener('click', function () {
+              // If analytics.js provides an API, use it
+              if (window.stiAnalytics && typeof window.stiAnalytics.refresh === 'function') {
+                window.stiAnalytics.refresh().catch(function () {
+                  renderPlaceholderChart(topicCanvas, 'Topic chart — no data');
+                  renderPlaceholderChart(speakerCanvas, 'Speaker chart — no data');
+                });
+              } else {
+                renderPlaceholderChart(topicCanvas, 'Topic chart — no data');
+                renderPlaceholderChart(speakerCanvas, 'Speaker chart — no data');
+                if (wordcloud && wordcloud.children.length === 0) {
+                  wordcloud.innerHTML = '<p class="muted">No keywords to display. Upload sessions to populate analytics.</p>';
+                }
+                window.showToast('Analytics refreshed (placeholder)', 1400);
+              }
+            }, { passive: true });
+            refreshBtn.__fallbackAttached = true;
+          }
+        }
+
+        // Ensure placeholders show on initial load if analytics.js didn't draw
+        if (topicCanvas && !topicCanvas.__renderedByAnalytics) renderPlaceholderChart(topicCanvas, 'Topic chart — loading');
+        if (speakerCanvas && !speakerCanvas.__renderedByAnalytics) renderPlaceholderChart(speakerCanvas, 'Speaker chart — loading');
+        if (wordcloud && wordcloud.children.length === 0) {
+          wordcloud.innerHTML = '<p class="muted">No keywords to display. Use Refresh to load placeholder analytics.</p>';
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Analytics require JavaScript to render charts.
+    </div>
+  </noscript>
 </body>
 </html>

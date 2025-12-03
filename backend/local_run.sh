@@ -9,7 +9,7 @@ set -euo pipefail
 # - Runs FastAPI with uvicorn (hot-reload by default in dev)
 # - Convenience test modes:
 #     --test-transcribe <file>   : run transcribe_local_file on a local audio file
-#     --test-pii "<text>"        : run redaction/detection on provided text
+#     --test-pii "<text>"        : run PII detection/redaction on provided text
 # - Extra runtime flags: --port, --host, --workers, --no-reload, --log-level
 # - Exits non-zero on errors; prints helpful usage.
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 #   ./local_run.sh --test-pii "Call me at +1-555-123-4567"
 # ------------------------------------------------------------
 
-# Default config
+# Defaults
 PORT=8000
 HOST="0.0.0.0"
 WORKERS=1
@@ -48,11 +48,31 @@ USG
   exit 1
 }
 
-# Load .env if present (export simple KEY=VALUE lines, ignore comments/empty)
+# Load .env if present. This handles simple KEY=VAL lines and ignores comments.
 if [[ -f ".env" ]]; then
   echo "Loading environment from .env"
-  # shellcheck disable=SC2046
-  export $(grep -v '^\s*#' .env | sed -n '/=/p' | xargs -I {} bash -c 'echo {}' 2>/dev/null) || true
+  # shellcheck disable=SC1090,SC2046
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # strip leading/trailing whitespace
+    line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    # skip comments and empty
+    if [[ -z "$line" || "${line:0:1}" == "#" ]]; then
+      continue
+    fi
+    # only accept KEY=VAL (no export, no subshells)
+    if [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      # Use printf to avoid issues with backslashes; evaluate simple quoted values
+      key="${line%%=*}"
+      val="${line#*=}"
+      # Remove surrounding single or double quotes if present
+      if [[ "${val:0:1}" == "'" && "${val: -1}" == "'" ]] || [[ "${val:0:1}" == "\"" && "${val: -1}" == "\"" ]]; then
+        val="${val:1:-1}"
+      fi
+      export "$key"="$val"
+    else
+      echo "Skipping unsupported .env line: $line"
+    fi
+  done < .env
 fi
 
 # parse args
@@ -70,9 +90,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# basic environment validation
-command_exists() {
-  command -v "$1" >/dev/null 2>&1
+# helpers
+command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+is_integer() {
+  [[ "$1" =~ ^[0-9]+$ ]]
 }
 
 if ! command_exists "${PYTHON_BIN}"; then
@@ -80,9 +102,15 @@ if ! command_exists "${PYTHON_BIN}"; then
   exit 2
 fi
 
-# Check uvicorn availability
+# warn if uvicorn missing
 if ! "${PYTHON_BIN}" -c "import importlib, sys; sys.exit(0 if importlib.util.find_spec('uvicorn') else 1)"; then
-  echo "WARNING: uvicorn not installed in ${PYTHON_BIN} environment. Install via: pip install uvicorn[standard]"
+  echo "WARNING: uvicorn not installed in ${PYTHON_BIN} environment. Install via: pip install 'uvicorn[standard]'"
+fi
+
+# Validate workers
+if ! is_integer "${WORKERS}"; then
+  echo "Invalid workers value: ${WORKERS}. Must be integer."
+  exit 1
 fi
 
 # Mode: server (default)
@@ -92,7 +120,7 @@ if [[ "${MODE}" == "server" ]]; then
   if [[ "${RELOAD}" == "true" ]]; then
     UVICORN_CMD+=("--reload")
   fi
-  # For multiple workers, use --workers only in non-reload mode (uvicorn ignores workers with reload)
+  # For multiple workers, use --workers only in non-reload mode (uvicorn won't spawn workers with reload)
   if [[ "${WORKERS}" -gt 1 && "${RELOAD}" != "true" ]]; then
     UVICORN_CMD+=("--workers" "${WORKERS}")
   elif [[ "${WORKERS}" -gt 1 && "${RELOAD}" == "true" ]]; then
@@ -122,7 +150,7 @@ try:
 except Exception as e:
     print("Failed to import transcribe module:", e, file=sys.stderr)
     raise
-res = transcribe_local_file("${TEST_FILE}", split_seconds=None, tmp_dir="/tmp")
+res = transcribe_local_file("${TEST_FILE}", split_seconds=None, tmp_dir=None, s3_output_bucket=None, kick_off_transform=False)
 print(json.dumps(res, indent=2))
 PY
   exit 0

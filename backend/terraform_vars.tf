@@ -1,9 +1,13 @@
 # backend/terraform_vars.tf
 #
 # Project-level Terraform variables for the speech_to_insights backend.
-# Put environment-specific values in terraform.tfvars
-# or supply them via CLI/CI. Defaults are intentionally conservative.
-# Most defaults are null to force explicit opt-in for real deployments.
+# Put environment-specific values in terraform.tfvars or supply them via CLI/CI.
+# Defaults are intentionally conservative. Many values default to null so real
+# deployments must be explicitly configured.
+
+########################################
+# Project / Environment
+########################################
 
 variable "project_name" {
   description = "Short project identifier used in resource names and tags."
@@ -12,26 +16,27 @@ variable "project_name" {
 }
 
 variable "environment" {
-  description = "Deployment environment name (eg. dev, staging, prod)."
+  description = "Deployment environment name (dev, staging, prod)."
   type        = string
   default     = "dev"
 }
 
 variable "aws_region" {
-  description = "AWS region to create resources in (eg. us-east-1)."
+  description = "AWS region to deploy resources (e.g., us-east-1)."
   type        = string
   default     = "us-east-1"
 }
 
 variable "aws_account_id" {
-  description = "AWS account id. If not set, modules may derive it from provider."
+  description = "AWS account ID. If null, provider can infer from caller identity."
   type        = string
   default     = null
 }
 
-############################
-# S3 / storage
-############################
+########################################
+# S3 / Storage
+########################################
+
 variable "s3_input_bucket" {
   description = "S3 bucket for uploading audio inputs (batch transforms, uploads)."
   type        = string
@@ -50,9 +55,10 @@ variable "s3_logs_bucket" {
   default     = null
 }
 
-############################
+########################################
 # SageMaker / Model
-############################
+########################################
+
 variable "sagemaker_model_name" {
   description = "Name of the SageMaker model (for transform jobs or endpoints)."
   type        = string
@@ -60,113 +66,119 @@ variable "sagemaker_model_name" {
 }
 
 variable "sagemaker_endpoint_name" {
-  description = "Realtime SageMaker endpoint name. Leave null to skip creating one."
+  description = "Name of the SageMaker realtime endpoint. Leave null to skip endpoint creation."
   type        = string
   default     = null
 }
 
 variable "sagemaker_instance_type" {
-  description = "Instance type for realtime or transform jobs (eg. ml.g4dn.xlarge)."
+  description = "Instance type for realtime endpoints or batch transforms (e.g., ml.g4dn.xlarge)."
   type        = string
   default     = "ml.g4dn.xlarge"
 }
 
 variable "sagemaker_instance_count" {
-  description = "Instance count for SageMaker transforms / endpoints."
+  description = "Instance count for SageMaker transforms or endpoints."
   type        = number
   default     = 1
 }
 
 variable "sagemaker_transform_role_arn" {
-  description = "IAM role ARN that SageMaker assumes for transform jobs."
+  description = "IAM role ARN SageMaker assumes for transform jobs."
   type        = string
   default     = null
 }
 
-############################
-# Lambda / compute
-############################
+########################################
+# Lambda / Compute
+########################################
+
 variable "lambda_memory_mb" {
-  description = "Default Lambda memory size."
+  description = "Default memory size for Lambda functions."
   type        = number
   default     = 2048
 }
 
 variable "lambda_timeout_sec" {
-  description = "Default Lambda timeout (seconds)."
+  description = "Default Lambda timeout in seconds."
   type        = number
   default     = 300
 }
 
 variable "lambda_role_arn" {
-  description = "IAM role ARN for Lambda. If null, Terraform may create one."
+  description = "IAM role ARN for Lambda execution. If null, Terraform may create one."
   type        = string
   default     = null
 }
 
 variable "lambda_reserved_concurrent_executions" {
-  description = "Optional reserved concurrency for Lambdas."
+  description = "Optional reserved concurrency configuration for Lambdas."
   type        = number
   default     = null
 }
 
-############################
+########################################
 # Step Functions / Orchestration
-############################
+########################################
+
 variable "step_functions_role_arn" {
   description = "IAM role ARN for Step Functions state machines."
   type        = string
   default     = null
 }
 
-############################
-# Networking (optional)
-############################
+########################################
+# Networking (Optional)
+########################################
+
 variable "vpc_id" {
-  description = "VPC id for deploying compute resources. Optional."
+  description = "VPC ID for compute resources (Lambda/SageMaker). Optional."
   type        = string
   default     = null
 }
 
 variable "subnet_ids" {
-  description = "Subnets for resources needing VPC access."
+  description = "List of subnet IDs for VPC-resident resources."
   type        = list(string)
   default     = []
 }
 
 variable "security_group_ids" {
-  description = "Security groups for VPC-resident resources."
+  description = "Security group IDs for resources deployed inside a VPC."
   type        = list(string)
   default     = []
 }
 
-############################
-# KMS / encryption
-############################
+########################################
+# KMS / Encryption
+########################################
+
 variable "kms_key_id" {
-  description = "Optional KMS key arn/id used for S3 or other encrypted resources."
+  description = "Optional KMS key ARN/ID used for encrypting S3 or compute resources."
   type        = string
   default     = null
 }
 
-############################
-# CI / deployment
-############################
+########################################
+# CI / Deployment
+########################################
+
 variable "ci_deploy_user" {
-  description = "Optional IAM user/role used by CI to deploy infra."
+  description = "IAM user/role ARN used by CI to deploy infrastructure."
   type        = string
   default     = null
 }
 
 variable "enable_ci_workflow" {
-  description = "Enable or disable CI/CD workflow resources."
+  description = "Enable CI/CD workflow resources (GitHub Actions, IAM permissions, etc)."
   type        = bool
   default     = false
 }
 
-############################
-# Misc / feature flags
-############################
+########################################
+# Feature Flags (Creation / Toggle)
+########################################
+
 variable "create_sagemaker_endpoint" {
   description = "Whether to create a SageMaker realtime endpoint."
   type        = bool
@@ -180,7 +192,7 @@ variable "enable_step_functions" {
 }
 
 variable "tags" {
-  description = "Default resource tags."
+  description = "Default resource tags applied to all components."
   type        = map(string)
   default = {
     Project     = "speech-to-insights"
@@ -188,27 +200,29 @@ variable "tags" {
   }
 }
 
-############################
-# Testing / local dev
-############################
+########################################
+# Local Dev / Safety
+########################################
+
 variable "local_development" {
-  description = "Controls behavior for local dev (skip expensive resources)."
+  description = "If true, skip expensive resources (SageMaker, Step Functions) for local testing."
   type        = bool
   default     = true
 }
 
 variable "allow_destroy_production" {
-  description = "Safety flag: allow Terraform destroy in production environments."
+  description = "Safety switch. Must be true to allow 'terraform destroy' in production."
   type        = bool
   default     = false
 }
 
-############################
+########################################
 # Example overrides (DO NOT COMMIT)
-############################
-# aws_region = "us-west-2"
-# environment = "prod"
-# s3_input_bucket = "my-speech-inputs-prod"
-# s3_transform_output_bucket = "my-speech-outputs-prod/prefix"
-# sagemaker_transform_role_arn = "arn:aws:iam::123456789012:role/SageMakerTransformRole"
-# lambda_role_arn = "arn:aws:iam::123456789012:role/LambdaExecutionRole"
+#
+# aws_region                      = "us-west-2"
+# environment                     = "prod"
+# s3_input_bucket                 = "my-speech-inputs-prod"
+# s3_transform_output_bucket      = "my-speech-outputs-prod/prefix"
+# sagemaker_transform_role_arn    = "arn:aws:iam::123456789012:role/SageMakerTransformRole"
+# lambda_role_arn                 = "arn:aws:iam::123456789012:role/LambdaExecutionRole"
+########################################

@@ -1,70 +1,73 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Sessions</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Browse previously uploaded meetings — filter, inspect, and open session details." />
+  <meta name="author" content="Sri Akash Kadali" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Sessions</h2>
-        <p>Browse past meetings.</p>
+        <p class="muted">Browse past meetings.</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html" class="active">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html" class="active" aria-current="page">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONSOLE AREA -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
     <div class="main-inner">
 
       <!-- HEADER -->
       <header class="page-header">
-        <h1 class="page-title">All Sessions</h1>
-        <p class="page-subtitle">
-          View and filter all previously uploaded meetings.
-        </p>
+        <h1 id="page-title" class="page-title">All Sessions</h1>
+        <p class="page-subtitle">View and filter all previously uploaded meetings.</p>
       </header>
 
       <!-- FILTER BAR -->
-      <section class="card">
-        <div class="filters row">
+      <section class="card" aria-labelledby="filters-heading">
+        <h2 id="filters-heading" class="visually-hidden">Session filters</h2>
+        <div class="filters row" role="region" aria-label="Session filters">
           <div class="field">
             <label for="sessions-date-from">From</label>
-            <input type="date" id="sessions-date-from">
+            <input type="date" id="sessions-date-from" name="sessions-date-from" />
           </div>
 
           <div class="field">
             <label for="sessions-date-to">To</label>
-            <input type="date" id="sessions-date-to">
+            <input type="date" id="sessions-date-to" name="sessions-date-to" />
           </div>
 
           <div class="field">
@@ -72,51 +75,157 @@
             <input
               type="text"
               id="sessions-tag"
+              name="sessions-tag"
               placeholder="roadmap, pricing, Q1 plan"
-            >
+              aria-label="Tag filter"
+            />
           </div>
 
-          <button id="sessions-filter-btn" class="cta-secondary small-btn">
-            Apply
-          </button>
+          <div class="field">
+            <button id="sessions-filter-btn" class="cta-secondary small-btn" type="button" aria-label="Apply session filters">Apply</button>
+          </div>
         </div>
       </section>
 
       <!-- SESSION LIST TABLE -->
-      <section class="card">
-        <h2>Session List</h2>
+      <section class="card" aria-labelledby="session-list-heading">
+        <h2 id="session-list-heading">Session List</h2>
 
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Date</th>
-              <th>Duration</th>
-              <th>Tags</th>
-              <th></th>
-            </tr>
-          </thead>
+        <div class="table-wrap" role="region" aria-label="Sessions table">
+          <table class="table" aria-describedby="session-list-heading">
+            <thead>
+              <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Date</th>
+                <th scope="col">Duration</th>
+                <th scope="col">Tags</th>
+                <th scope="col" aria-hidden="true">Actions</th>
+              </tr>
+            </thead>
 
-          <tbody id="sessions-table-body">
-            <!-- Filled dynamically by sessions.js -->
-          </tbody>
-        </table>
+            <tbody id="sessions-table-body">
+              <!-- Filled dynamically by /js/sessions.js -->
+            </tbody>
+          </table>
+        </div>
       </section>
 
     </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
   <!-- Toast -->
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
 
-  <!-- JS paths fixed -->
-  <script src="js/main.js"></script>
-  <script src="js/sessions.js"></script>
+  <!-- Scripts (deferred): toast, main site behavior, sessions logic -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/sessions.js"></script>
 
+  <!-- Defensive inline script: ensures toast, theme, and a minimal sessions UI when external scripts are missing -->
+  <script>
+    (function () {
+      'use strict';
+
+      function ensureToast() {
+        if (typeof window.showToast === 'function') return;
+        window.showToast = function (message, timeout) {
+          try {
+            var toast = document.getElementById('toast');
+            if (!toast) { console.log('TOAST:', message); return; }
+            toast.hidden = false;
+            toast.textContent = String(message || '');
+            toast.classList.add('visible');
+            setTimeout(function () { toast.classList.remove('visible'); toast.hidden = true; }, typeof timeout === 'number' ? timeout : 3000);
+          } catch (e) {
+            try { console.log('TOAST (fallback):', message); } catch (_) {}
+          }
+        };
+      }
+
+      function safeInit() {
+        ensureToast();
+
+        // Theme toggle fallback + restore
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
+          themeToggle.addEventListener('click', function () {
+            try {
+              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              themeLink.setAttribute('href', next);
+              themeToggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle fallback error', e); }
+          }, { passive: true });
+
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+          themeToggle.__fallbackAttached = true;
+        }
+
+        // Sessions table fallback: populate a small placeholder if sessions.js didn't
+        var tbody = document.getElementById('sessions-table-body');
+        try {
+          var hasRows = tbody && tbody.children.length > 0;
+          if (tbody && !hasRows) {
+            var row = document.createElement('tr');
+            var td = document.createElement('td');
+            td.textContent = 'No sessions available (demo placeholder)';
+            td.colSpan = 5;
+            td.className = 'muted';
+            row.appendChild(td);
+            tbody.appendChild(row);
+          }
+        } catch (e) {
+          console.warn('sessions fallback error', e);
+        }
+
+        // Wire the filter "Apply" button to trigger sessions.js filter if provided, otherwise show a demo toast
+        var filterBtn = document.getElementById('sessions-filter-btn');
+        if (filterBtn && !filterBtn.__handled) {
+          filterBtn.addEventListener('click', function () {
+            var from = (document.getElementById('sessions-date-from') || {}).value || '';
+            var to = (document.getElementById('sessions-date-to') || {}).value || '';
+            var tag = (document.getElementById('sessions-tag') || {}).value || '';
+
+            if (typeof window.applySessionFilters === 'function') {
+              try {
+                window.applySessionFilters({ dateFrom: from, dateTo: to, tag: tag });
+                return;
+              } catch (err) {
+                console.error('applySessionFilters failed', err);
+                window.showToast('Filter failed (check console)', 2000);
+              }
+            }
+
+            window.showToast('Filters applied (demo). No backend in demo mode.', 2000);
+          }, { passive: true });
+
+          filterBtn.__handled = true;
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">JavaScript is disabled. Sessions list requires JavaScript to populate dynamically.</div>
+  </noscript>
 </body>
 </html>

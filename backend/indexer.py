@@ -1,6 +1,5 @@
+# backend/indexer.py
 """
-backend/indexer.py
-
 Final upgraded Vector index module for speech_to_insights.
 
 Features / improvements:
@@ -32,6 +31,10 @@ import numpy as np
 logger = logging.getLogger("indexer")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(ch)
 
 # attempt to import embedding module (required)
 try:
@@ -69,7 +72,8 @@ def _cosine_sim_matrix(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
     denom = qn * mn
     denom_safe = np.where(denom == 0, 1e-12, denom)
     sims = (matrix @ query_vec) / denom_safe
-    return sims
+    # clip to [-1, 1] for numeric stability
+    return np.clip(sims, -1.0, 1.0)
 
 
 # ----------------------
@@ -107,8 +111,10 @@ class VectorIndex:
 
         # If no batch but single exists, wrap single
         if self._embed_batch is None and self._embed_single is not None:
+
             def _wrap_batch(texts: List[str]):
                 return [self._embed_single(t) for t in texts]
+
             self._embed_batch = _wrap_batch
 
         if self._embed_batch is None:
@@ -164,8 +170,13 @@ class VectorIndex:
     # ----------------------
     # add / build
     # ----------------------
-    def add(self, texts: List[str], metas: Optional[List[Dict[str, Any]]] = None,
-            ids: Optional[List[str]] = None, chunking: Optional[int] = None) -> List[str]:
+    def add(
+        self,
+        texts: List[str],
+        metas: Optional[List[Dict[str, Any]]] = None,
+        ids: Optional[List[str]] = None,
+        chunking: Optional[int] = None,
+    ) -> List[str]:
         """
         Embed and add a list of texts.
 
@@ -189,7 +200,7 @@ class VectorIndex:
                 start = 0
                 chunk_idx = 0
                 while start < len(txt):
-                    part = txt[start:start + chunking]
+                    part = txt[start : start + chunking]
                     meta_copy = dict(metas[i]) if metas else {}
                     meta_copy["_chunk_index"] = chunk_idx
                     meta_copy["_source_id"] = ids[i]
@@ -385,19 +396,22 @@ class VectorIndex:
 
         out: List[Dict[str, Any]] = []
         for idx, score in results:
-            out.append({
-                "id": self.ids[idx] if idx < len(self.ids) else None,
-                "meta": self.meta[idx] if idx < len(self.meta) else {},
-                "score": float(score)
-            })
+            out.append(
+                {
+                    "id": self.ids[idx] if idx < len(self.ids) else None,
+                    "meta": self.meta[idx] if idx < len(self.meta) else {},
+                    "score": float(score),
+                }
+            )
         return out
 
 
 # ----------------------
 # Convenience functions / CLI helpers
 # ----------------------
-def build_index_from_text_files(paths: List[Path], index_base: Optional[Path] = None,
-                                chunk_chars: Optional[int] = 2000, use_faiss: bool = True) -> VectorIndex:
+def build_index_from_text_files(
+    paths: List[Path], index_base: Optional[Path] = None, chunk_chars: Optional[int] = 2000, use_faiss: bool = True
+) -> VectorIndex:
     """
     Build an index from a list of text files, persist and return the VectorIndex.
     """
@@ -447,6 +461,7 @@ def simple_query_loop(index: VectorIndex, top_k: int = 5) -> None:
 # ----------------------
 def _cli():
     import argparse
+
     parser = argparse.ArgumentParser(description="Index builder / query tool")
     sub = parser.add_subparsers(dest="cmd", required=True)
 

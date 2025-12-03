@@ -1,4 +1,5 @@
 // main.js — sitewide behaviors: theme, upload helper, small utilities
+// Place in /frontend/js/main.js and ensure HTML references match.
 (function () {
   'use strict';
 
@@ -6,7 +7,13 @@
   var sti = window.sti || (window.sti = {});
   var api = sti.main || (sti.main = {});
 
-  // -- Theme helpers
+  // ---- Configuration (override via window.STI if needed) ----
+  var DEFAULT_PRESIGN = (window.STI && window.STI.PRESIGN_ENDPOINT) || '/presign';
+  var DEFAULT_UPLOAD = (window.STI && window.STI.UPLOAD_ENDPOINT) || '/upload';
+  var DEFAULT_FETCH_TIMEOUT_MS = (window.STI && window.STI.FETCH_TIMEOUT_MS) || 3000;
+  var DEFAULT_PRESIGN_EXPIRES = (window.STI && window.STI.PRESIGN_EXPIRES) || 900;
+
+  // ---- Theme helpers ----
   function getThemeLink() {
     return document.getElementById('theme-link');
   }
@@ -14,9 +21,14 @@
   function setTheme(href) {
     var tl = getThemeLink();
     if (!tl) return false;
-    tl.setAttribute('href', href);
-    try { localStorage.setItem('sti-theme', href); } catch (e) { /* ignore storage errors */ }
-    return true;
+    try {
+      tl.setAttribute('href', href);
+      try { localStorage.setItem('sti-theme', href); } catch (e) { /* ignore storage errors */ }
+      return true;
+    } catch (e) {
+      console.warn('setTheme failed', e);
+      return false;
+    }
   }
 
   function toggleTheme() {
@@ -30,14 +42,12 @@
     return next;
   }
 
-  // -- Lightweight toast fallback (if toast.js missing)
+  // ---- Lightweight toast fallback (if toast.js missing) ----
   function ensureToast() {
     if (typeof window.showToast === 'function') return;
     window.showToast = function (message, timeout) {
-      // non-intrusive fallback: console + short alert when focused
       try {
         if (console && console.log) console.log('TOAST:', message);
-        // best-effort render into #toast element if present
         var t = document.getElementById('toast');
         if (t) {
           t.textContent = message;
@@ -47,102 +57,170 @@
           return;
         }
       } catch (e) { /* ignore */ }
-      try { /* last resort */ alert(message); } catch (e) {}
+      try { alert(message); } catch (e) {}
     };
   }
 
-  // -- Fetch helpers
-  async function fetchJson(url, opts) {
-    try {
-      var res = await fetch(url, opts);
-      var text = await res.text();
-      try { return { status: res.status, ok: res.ok, json: JSON.parse(text) }; }
-      catch (e) { return { status: res.status, ok: res.ok, text: text }; }
-    } catch (err) {
-      return { status: 0, ok: false, error: String(err) };
-    }
+  // ---- Fetch helpers ----
+  function fetchJson(url, opts) {
+    return fetch(url, opts)
+      .then(function (res) {
+        return res.text().then(function (text) {
+          try { return { status: res.status, ok: res.ok, json: JSON.parse(text) }; }
+          catch (e) { return { status: res.status, ok: res.ok, text: text }; }
+        });
+      })
+      .catch(function (err) {
+        return { status: 0, ok: false, error: String(err) };
+      });
   }
 
-  // -- Upload helper: try presign (PUT) then multipart POST fallback
+  function fetchJsonWithTimeout(url, opts, timeoutMs) {
+    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : DEFAULT_FETCH_TIMEOUT_MS;
+    var controller = new AbortController();
+    var id = setTimeout(function () { controller.abort(); }, timeoutMs);
+    opts = opts || {};
+    opts.signal = controller.signal;
+    opts.credentials = opts.credentials || 'same-origin';
+    return fetch(url, opts)
+      .then(function (res) {
+        clearTimeout(id);
+        return res.text().then(function (text) {
+          try { return { status: res.status, ok: res.ok, json: JSON.parse(text) }; }
+          catch (e) { return { status: res.status, ok: res.ok, text: text }; }
+        });
+      })
+      .catch(function (err) {
+        clearTimeout(id);
+        return { status: 0, ok: false, error: String(err) };
+      });
+  }
+
+  // ---- Upload helper: try presign (PUT) then multipart POST fallback ----
+  // Returns a normalized result object: { ok: boolean, transport: 'presign'|'multipart'|'error', ... }
   async function uploadFile(file, options) {
     options = options || {};
-    var presignEndpoint = options.presignEndpoint || '/presign';
-    var uploadEndpoint = options.uploadEndpoint || '/upload';
+    var presignEndpoint = options.presignEndpoint || DEFAULT_PRESIGN;
+    var uploadEndpoint = options.uploadEndpoint || DEFAULT_UPLOAD;
     var startWorkflow = !!options.startWorkflow;
+    var presignExpires = typeof options.presignExpires === 'number' ? options.presignExpires : DEFAULT_PRESIGN_EXPIRES;
 
     if (!file) throw new Error('uploadFile: missing file');
 
-    // try presign
+    // Attempt presign -> PUT
     try {
-      var qs = '?filename=' + encodeURIComponent(file.name) + '&content_type=' + encodeURIComponent(file.type || 'application/octet-stream');
-      var presign = await fetchJson(presignEndpoint + qs, { method: 'GET', credentials: 'same-origin' });
-      if (presign && presign.ok && presign.json && presign.json.result && presign.json.result.url) {
-        var putRes = await fetch(presign.json.result.url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' } });
-        if (!putRes.ok) throw new Error('Presigned PUT failed: ' + putRes.status);
-        return { ok: true, transport: 'presign', s3_uri: presign.json.result.s3_uri, upload_id: presign.json.result.upload_id };
+      var qs = '?filename=' + encodeURIComponent(file.name)
+             + '&content_type=' + encodeURIComponent(file.type || 'application/octet-stream')
+             + '&expires_in=' + encodeURIComponent(presignExpires)
+             + (startWorkflow ? '&start_workflow=true' : '');
+      var presignResp = await fetchJsonWithTimeout(presignEndpoint + qs, { method: 'GET' }, DEFAULT_FETCH_TIMEOUT_MS);
+      if (presignResp && presignResp.ok && presignResp.json) {
+        var presignResult = presignResp.json.result || presignResp.json;
+        // Accept both url or presigned_url
+        var putUrl = (presignResult && (presignResult.url || presignResult.presigned_url || presignResult.presign_url || presignResult.upload_url));
+        if (putUrl) {
+          var headers = {};
+          if (file.type) headers['Content-Type'] = file.type;
+          // Try PUT directly
+          var putRes = await fetch(putUrl, { method: 'PUT', body: file, headers: headers });
+          if (putRes && (putRes.ok || putRes.status === 200 || putRes.status === 201)) {
+            return {
+              ok: true,
+              transport: 'presign',
+              s3_uri: presignResult.s3_uri || presignResult.s3Uri || presignResult.bucket_path || null,
+              upload_id: presignResult.upload_id || presignResult.uploadId || null,
+              raw: presignResult
+            };
+          } else {
+            // PUT failed — fall through to multipart fallback
+            console.warn('Presign PUT failed (status=' + (putRes && putRes.status) + '), falling back to multipart.');
+          }
+        } else {
+          // No usable URL returned; fall back
+          console.info('Presign response missing URL; falling back to multipart.', presignResult);
+        }
+      } else {
+        if (presignResp && !presignResp.ok && presignResp.status) {
+          console.info('Presign endpoint returned status', presignResp.status, presignResp.text || presignResp.error);
+        }
       }
     } catch (e) {
-      // silent fallback to multipart below
+      // silent fallback to multipart
+      console.info('Presign flow failed, falling back to multipart:', e && e.message ? e.message : e);
     }
 
-    // fallback: multipart POST
+    // Fallback: multipart POST to uploadEndpoint
     try {
       var fd = new FormData();
       fd.append('file', file, file.name);
       if (startWorkflow) fd.append('start_workflow', 'true');
-      var post = await fetch(uploadEndpoint, { method: 'POST', body: fd, credentials: 'same-origin' });
-      var txt = await post.text();
-      try { return { ok: post.ok, transport: 'multipart', status: post.status, json: JSON.parse(txt) }; }
-      catch (e) { return { ok: post.ok, transport: 'multipart', status: post.status, text: txt }; }
+
+      var postResp = await fetch(uploadEndpoint, { method: 'POST', body: fd, credentials: 'same-origin' });
+      var text = await postResp.text();
+      try {
+        var json = JSON.parse(text);
+        return { ok: postResp.ok, transport: 'multipart', status: postResp.status, json: json };
+      } catch (e) {
+        return { ok: postResp.ok, transport: 'multipart', status: postResp.status, text: text };
+      }
     } catch (err) {
-      return { ok: false, error: String(err) };
+      return { ok: false, transport: 'error', error: String(err) };
     }
   }
 
-  // -- Wire file inputs with data-upload attribute to the upload helper
+  // ---- Wire file inputs with data-upload attribute to the upload helper ----
   function wireAutoUploads() {
-    // use a NodeList snapshot to avoid live-list mutation problems
     var inputs = Array.prototype.slice.call(document.querySelectorAll('input[type="file"][data-upload]'));
     inputs.forEach(function (el) {
       if (el.__stiBound) return;
       el.addEventListener('change', async function () {
         var files = el.files || [];
         if (!files.length) return;
-        var trigger = document.querySelector('[data-upload-trigger="' + el.id + '"]') || el;
+        var triggerSelector = el.dataset.uploadTrigger;
+        var trigger = triggerSelector ? document.querySelector(triggerSelector) : (document.querySelector('[data-upload-trigger="' + el.id + '"]') || el);
         try {
-          trigger.disabled = true;
+          if (trigger) trigger.disabled = true;
           ensureToast();
           window.showToast('Uploading...', 1200);
 
           var res = await uploadFile(files[0], {
-            presignEndpoint: el.dataset.presignEndpoint || '/presign',
-            uploadEndpoint: el.dataset.uploadEndpoint || '/upload',
-            startWorkflow: el.dataset.startWorkflow === 'true'
+            presignEndpoint: el.dataset.presignEndpoint || DEFAULT_PRESIGN,
+            uploadEndpoint: el.dataset.uploadEndpoint || DEFAULT_UPLOAD,
+            startWorkflow: el.dataset.startWorkflow === 'true' || el.dataset.startWorkflow === '1',
+            presignExpires: el.dataset.presignExpires ? parseInt(el.dataset.presignExpires, 10) : undefined
           });
 
           if (res && res.ok) {
             window.showToast('Upload succeeded', 1600);
+            // optional callback hook: window.STI.onUploadSuccess
+            try {
+              if (window.STI && typeof window.STI.onUploadSuccess === 'function') window.STI.onUploadSuccess(res);
+            } catch (e) { /* ignore callback errors */ }
           } else {
-            var msg = (res && (res.error || (res.json && JSON.stringify(res.json)) || res.text)) || 'unknown';
-            window.showToast('Upload failed: ' + msg, 3000);
+            var msg = 'unknown';
+            if (res) {
+              msg = res.error || (res.json && (res.json.error || JSON.stringify(res.json))) || res.text || JSON.stringify(res);
+            }
+            window.showToast('Upload failed: ' + msg, 6000);
+            try {
+              if (window.STI && typeof window.STI.onUploadFailure === 'function') window.STI.onUploadFailure(res);
+            } catch (e) { /* ignore */ }
           }
         } catch (err) {
-          window.showToast('Upload error: ' + String(err), 3000);
+          window.showToast('Upload error: ' + String(err), 6000);
         } finally {
-          try { trigger.disabled = false; } catch (e) {}
+          try { if (trigger) trigger.disabled = false; } catch (e) {}
         }
       }, { passive: true });
       el.__stiBound = true;
     });
   }
 
-  // -- Theme toggle initialization (idempotent)
+  // ---- Theme toggle initialization (idempotent) ----
   function initThemeToggle() {
     var btn = document.getElementById('theme-toggle');
     if (!btn || btn.__stiBound) return;
-    btn.addEventListener('click', function () {
-      toggleTheme();
-    }, { passive: true });
+    btn.addEventListener('click', function () { toggleTheme(); }, { passive: true });
     btn.__stiBound = true;
 
     // restore saved theme if present
@@ -152,7 +230,7 @@
     } catch (e) { /* ignore */ }
   }
 
-  // -- Safe initialization on DOM ready
+  // ---- Safe initialization on DOM ready ----
   function safeInit() {
     ensureToast();
     initThemeToggle();
@@ -163,6 +241,7 @@
     api.setTheme = setTheme;
     api.uploadFile = uploadFile;
     api.fetchJson = fetchJson;
+    api.fetchJsonWithTimeout = fetchJsonWithTimeout;
   }
 
   if (document.readyState === 'loading') {

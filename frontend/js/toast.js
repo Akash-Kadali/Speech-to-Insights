@@ -1,54 +1,66 @@
-// toast.js — simple toast API used across pages
+// toast.js — Final corrected
+// Simple, robust, CSS-friendly toast API used across all pages.
+// Automatically creates a toast container if missing, prevents duplicates,
+// and exposes window.showToast + window.toast.show.
+
 (function (window, document) {
   'use strict';
 
-  // Avoid duplicate initialization
+  // Prevent double initialization
   if (window.__stiToastInitialized) return;
   window.__stiToastInitialized = true;
 
-  // Public namespace
+  // Namespace
   var api = window.toast || (window.toast = {});
 
+  // Create container if needed
   function ensureToastContainer() {
     var el = document.getElementById('toast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'toast';
-      el.setAttribute('aria-live', 'polite');
-      el.setAttribute('aria-atomic', 'true');
-      el.setAttribute('role', 'status');
-      el.className = 'toast-container';
-      document.body.appendChild(el);
-    }
+    if (el) return el;
+
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('aria-atomic', 'true');
+    el.className = 'toast-container';
+    document.body.appendChild(el);
     return el;
   }
 
+  // Core toast behavior
   function showToast(message, timeout) {
+    message = (message == null ? '' : String(message));
+    timeout = typeof timeout === 'number' ? timeout : 3000;
+
     try {
       var el = ensureToastContainer();
+
+      // Reset text content
       el.textContent = message;
 
-      // Reset animation state if still visible
+      // Restart CSS animation by forcing reflow
       el.classList.remove('visible');
-      void el.offsetWidth; // force reflow to restart CSS animation
+      void el.offsetWidth;
       el.classList.add('visible');
 
-      timeout = typeof timeout === 'number' ? timeout : 3000;
+      // Hide after timeout
       setTimeout(function () {
-        el.classList.remove('visible');
+        try { el.classList.remove('visible'); } catch (_) {}
       }, timeout);
-    } catch (e) {
-      // Last-resort fallback
-      console.warn('Toast fallback:', e, message);
+    } catch (err) {
+      // Final fallback
+      if (console && console.warn) console.warn('[toast.js fallback]', err);
       try { alert(message); } catch (_) {}
     }
   }
 
-  // Global exposure (idempotent)
+  // Register global showToast if not already defined
   if (typeof window.showToast !== 'function') {
     window.showToast = showToast;
   }
 
+  // Expose API
   api.show = showToast;
   api.ensure = ensureToastContainer;
 

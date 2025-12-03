@@ -1,136 +1,195 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Credits</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Credits and acknowledgements for the Speech to Insights MSML 650 term project." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Skip link for accessibility -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Credits</h2>
-        <p>Acknowledgements</p>
+        <p class="muted">Acknowledgements</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
-      <a href="README.html">README</a>
-      <a href="credits.html" class="active">Credits</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/README.html">README</a>
+      <a href="/credits.html" class="active" aria-current="page">Credits</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONTENT -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
     <div class="main-inner">
 
       <!-- HEADER -->
       <header class="page-header">
-        <h1 class="page-title">Credits & Acknowledgements</h1>
-        <p class="page-subtitle">
+        <h1 id="page-title" class="page-title">Credits &amp; Acknowledgements</h1>
+        <p class="page-subtitle muted">
           Special thanks and recognition for contributions to this project.
         </p>
       </header>
 
-      <!-- DEVELOPER -->
-      <section class="card">
-        <h2>👨‍💻 Developer</h2>
-        <p>
-          This project was designed and developed by:
-        </p>
-        <ul class="list subtle">
-          <li><strong>Karthik (Surya Vamsi Vakada)</strong></li>
-          <li>Graduate Student – MSML Program</li>
-          <li>University of Maryland</li>
-        </ul>
-      </section>
+      <div class="grid gap-lg">
+        <!-- DEVELOPER -->
+        <section class="card" aria-labelledby="developer-heading">
+          <h2 id="developer-heading">Developer</h2>
+          <p>This project was designed and developed by:</p>
+          <ul class="list subtle">
+            <li><strong>Karthik (Surya Vamsi Vakada)</strong></li>
+            <li>Graduate Student – MSML Program</li>
+            <li>University of Maryland</li>
+          </ul>
+        </section>
 
-      <!-- COURSE INFO -->
-      <section class="card">
-        <h2>📘 Course Information</h2>
-        <ul class="list subtle">
-          <li><strong>Course:</strong> MSML 650 – Machine Learning Systems</li>
-          <li><strong>Program:</strong> Master of Science in Machine Learning</li>
-          <li><strong>Institution:</strong> University of Maryland</li>
-        </ul>
-      </section>
+        <!-- COURSE INFO -->
+        <section class="card" aria-labelledby="course-heading">
+          <h2 id="course-heading">Course Information</h2>
+          <ul class="list subtle">
+            <li><strong>Course:</strong> MSML 650 – Machine Learning Systems</li>
+            <li><strong>Program:</strong> Master of Science in Machine Learning</li>
+            <li><strong>Institution:</strong> University of Maryland</li>
+          </ul>
+        </section>
 
-      <!-- ACKNOWLEDGEMENTS -->
-      <section class="card">
-        <h2>🙏 Acknowledgements</h2>
-        <p>
-          I would like to extend special thanks to:
-        </p>
-        <ul class="list subtle">
-          <li>MSML 650 instructors for the concepts and system design principles taught.</li>
-          <li>The teaching staff for guidance throughout the course.</li>
-          <li>Class peers for discussion, collaboration, and inspiration.</li>
-        </ul>
-      </section>
+        <!-- ACKNOWLEDGEMENTS -->
+        <section class="card" aria-labelledby="ack-heading">
+          <h2 id="ack-heading">Acknowledgements</h2>
+          <p>I would like to extend special thanks to:</p>
+          <ul class="list subtle">
+            <li>MSML 650 instructors for course content and system design guidance</li>
+            <li>Teaching staff for support throughout the term</li>
+            <li>Class peers for discussion, testing, and collaboration</li>
+          </ul>
+        </section>
 
-      <!-- RESOURCES -->
-      <section class="card">
-        <h2>📚 Libraries & Resources</h2>
-        <p class="muted">
-          This frontend project is built without external JS frameworks.<br>
-          Inspiration and concepts were drawn from:
-        </p>
-        <ul class="list subtle">
-          <li>Modern ML system architectures</li>
-          <li>NLP research (semantic search, summarization, embeddings)</li>
-          <li>UI/UX patterns from contemporary dashboard applications</li>
-        </ul>
-      </section>
+        <!-- RESOURCES -->
+        <section class="card" aria-labelledby="resources-heading">
+          <h2 id="resources-heading">Libraries &amp; Resources</h2>
+          <p class="muted">
+            This frontend project intentionally avoids heavy frameworks. Inspiration and
+            concepts were drawn from:
+          </p>
+          <ul class="list subtle">
+            <li>Modern ML system architectures and deployment patterns</li>
+            <li>NLP research on embeddings, semantic search, and summarization</li>
+            <li>UI and dashboard design patterns (progressive enhancement)</li>
+            <li>Browser APIs (Fetch, Canvas, localStorage) for lightweight UX</li>
+          </ul>
+        </section>
 
-      <!-- FINAL NOTE -->
-      <section class="card">
-        <h2>🌟 Final Note</h2>
-        <p>
-          This project is a demonstration of end-to-end system thinking,<br>
-          UI/UX design, ML pipeline simulation, and frontend implementation.
-        </p>
-        <p>
-          Thank you for reviewing this project!
-        </p>
-      </section>
-
+        <!-- FINAL NOTE -->
+        <section class="card" aria-labelledby="final-heading">
+          <h2 id="final-heading">Final Note</h2>
+          <p>
+            This project demonstrates end-to-end system thinking, UI design, ML pipeline simulation,
+            and a complete frontend implementation you can run locally. Thank you for reviewing the work.
+          </p>
+        </section>
+      </div>
     </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
   <!-- Toast -->
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- JS path fixed -->
-  <script src="js/main.js"></script>
+  <!-- Scripts -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
 
+  <!-- Defensive fallback: theme + toast -->
+  <script>
+    (function () {
+      function safeInit() {
+        // showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var t = document.getElementById('toast');
+              if (!t) { alert(message); return; }
+              t.textContent = String(message || '');
+              t.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { t.classList.remove('visible'); }, timeout);
+            } catch (err) {
+              try { alert(message); } catch (_) {}
+            }
+          };
+        }
+
+        // Theme toggle fallback with persistence
+        var toggle = document.getElementById('theme-toggle');
+        var link = document.getElementById('theme-link');
+        if (toggle && link && !toggle.__fallbackAttached) {
+          toggle.addEventListener('click', function () {
+            try {
+              var href = link.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              link.setAttribute('href', next);
+              toggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (_) {}
+            } catch (e) { console.warn('Theme toggle error', e); }
+          }, { passive: true });
+          toggle.__fallbackAttached = true;
+
+          // restore persisted theme
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) link.setAttribute('href', stored);
+          } catch (_) {}
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is required for some interactive features.
+    </div>
+  </noscript>
 </body>
 </html>

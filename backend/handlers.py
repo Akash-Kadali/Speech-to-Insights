@@ -1,6 +1,5 @@
+# backend/handlers.py
 """
-backend/handlers.py
-
 Enhanced orchestration helpers used by API, Lambda handlers, and tests.
 
 Purpose
@@ -35,6 +34,7 @@ from typing import Dict, Any, Optional, Tuple, IO
 try:
     import boto3  # type: ignore
     from botocore.exceptions import ClientError  # type: ignore
+
     _BOTO3_AVAILABLE = True
 except Exception:
     boto3 = None  # type: ignore
@@ -44,6 +44,10 @@ except Exception:
 logger = logging.getLogger("handlers")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(ch)
 
 # Best-effort imports of local integrations
 try:
@@ -72,20 +76,36 @@ TRANSFORM_INPUT_PREFIX = os.getenv("TRANSFORM_INPUT_PREFIX", "inputs").strip("/"
 STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN")
 OUTPUT_S3_BUCKET = os.getenv("OUTPUT_S3_BUCKET")
 OUTPUT_S3_PREFIX = os.getenv("OUTPUT_S3_PREFIX", "outputs").strip("/")
-MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", "5242880"))  # 5MB
-PRESIGN_URL_EXPIRES = int(os.getenv("PRESIGN_URL_EXPIRES", "900"))  # seconds
+try:
+    MAX_REALTIME_BYTES = int(os.getenv("MAX_REALTIME_BYTES", "5242880"))  # 5MB
+except Exception:
+    MAX_REALTIME_BYTES = 5 * 1024 * 1024
+try:
+    PRESIGN_URL_EXPIRES = int(os.getenv("PRESIGN_URL_EXPIRES", "900"))  # seconds
+except Exception:
+    PRESIGN_URL_EXPIRES = 900
 
 # Create clients lazily to avoid failing imports in environments without AWS creds
+_s3_client = None
+_sfn_client = None
+
+
 def _get_s3_client():
-    if not _BOTO3_AVAILABLE:
-        raise RuntimeError("boto3 not available in this environment")
-    return boto3.client("s3")
+    global _s3_client
+    if _s3_client is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 not available in this environment")
+        _s3_client = boto3.client("s3")
+    return _s3_client
 
 
 def _get_sfn_client():
-    if not _BOTO3_AVAILABLE:
-        raise RuntimeError("boto3 not available in this environment")
-    return boto3.client("stepfunctions")
+    global _sfn_client
+    if _sfn_client is None:
+        if not _BOTO3_AVAILABLE:
+            raise RuntimeError("boto3 not available in this environment")
+        _sfn_client = boto3.client("stepfunctions")
+    return _sfn_client
 
 
 # -------------------------
@@ -113,7 +133,8 @@ def _upload_fileobj(fileobj: IO[bytes], bucket: str, key: str, content_type: Opt
         except Exception:
             pass
         extra = {"ContentType": content_type} if content_type else {}
-        s3.upload_fileobj(fileobj, bucket, key, ExtraArgs=extra)
+        # boto3.upload_fileobj signature: Fileobj, Bucket, Key, ExtraArgs=...
+        s3.upload_fileobj(fileobj, bucket, key, ExtraArgs=extra if extra else None)
         uri = f"s3://{bucket}/{key}"
         logger.info("Uploaded file to %s", uri)
         return uri
@@ -167,12 +188,14 @@ def _generate_presigned_put(bucket: str, key: str, expires_in: int = PRESIGN_URL
 # -------------------------
 # High-level flows
 # -------------------------
-def handle_upload_fileobj(fileobj: IO[bytes],
-                          filename: str,
-                          start_workflow: bool = False,
-                          presign: bool = False,
-                          content_type: Optional[str] = None,
-                          run_id: Optional[str] = None) -> Dict[str, Any]:
+def handle_upload_fileobj(
+    fileobj: IO[bytes],
+    filename: str,
+    start_workflow: bool = False,
+    presign: bool = False,
+    content_type: Optional[str] = None,
+    run_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Upload a file-like object or provide presigned URL.
 
@@ -223,15 +246,13 @@ def handle_upload_fileobj(fileobj: IO[bytes],
         "s3_uri": s3_uri,
         "s3_bucket": TRANSFORM_INPUT_BUCKET,
         "s3_key": key,
-        "status": "uploaded"
+        "status": "uploaded",
     }
 
     # Inline realtime transcription for small files if whisper available
     try:
         if size is not None and size <= MAX_REALTIME_BYTES and whisper_module and getattr(whisper_module, "transcribe_bytes_realtime", None):
             try:
-                if not _BOTO3_AVAILABLE:
-                    raise RuntimeError("boto3 required to fetch object for realtime transcription")
                 s3 = _get_s3_client()
                 resp = s3.get_object(Bucket=TRANSFORM_INPUT_BUCKET, Key=key)
                 audio_bytes = resp["Body"].read()

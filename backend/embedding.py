@@ -1,6 +1,5 @@
+# backend/embedding.py
 """
-backend/embedding.py
-
 Pluggable, deterministic embedding provider used by the speech_to_insights project.
 
 Behavior:
@@ -40,6 +39,10 @@ logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 _USE_ST_MODEL = False
 _USE_OPENAI = False
 
+# Placeholder variables; will be set when providers initialize
+_st_model = None
+EMBEDDING_DIM: int = int(os.getenv("FALLBACK_EMBEDDING_DIM", "512"))
+
 # Attempt to import sentence_transformers
 try:
     from sentence_transformers import SentenceTransformer  # type: ignore
@@ -69,17 +72,15 @@ try:
         # We'll use OpenAI only if sentence-transformers not available (best-effort)
         _USE_OPENAI = True
         # OpenAI embedding dimension depends on model; set a default and adjust after first call.
-        EMBEDDING_DIM = int(os.getenv("OPENAI_EMBED_DIM", "1536"))
+        EMBEDDING_DIM = int(os.getenv("OPENAI_EMBED_DIM", str(EMBEDDING_DIM or 1536)))
         logger.info("OpenAI client available; embeddings can use OpenAI when selected")
     else:
         _USE_OPENAI = False
 except Exception:
     _USE_OPENAI = False
 
-# If neither provider succeeded, set fallback dimension
-if not (_USE_ST_MODEL or _USE_OPENAI):
-    EMBEDDING_DIM = int(os.getenv("FALLBACK_EMBEDDING_DIM", "512"))
-    logger.info("Using local deterministic fallback embeddings (dim=%d)", EMBEDDING_DIM)
+# If neither provider succeeded, EMBEDDING_DIM will remain set to fallback above.
+logger.debug("Embedding module initialized. USE_ST=%s USE_OPENAI=%s dim=%d", _USE_ST_MODEL, _USE_OPENAI, EMBEDDING_DIM)
 
 
 # -------------------------
@@ -92,14 +93,20 @@ def embed(text: str) -> np.ndarray:
     """
     if not isinstance(text, str):
         raise TypeError("text must be a string")
+
     # Fast path: sentence-transformers
     if _USE_ST_MODEL and _st_model is not None:
         vec = _st_model.encode(text, convert_to_numpy=True)
         vec = np.asarray(vec, dtype=np.float32)
         # Ensure shape and dimension
-        if vec.ndim == 1 and vec.size == EMBEDDING_DIM:
+        if vec.ndim == 1:
+            if vec.size != EMBEDDING_DIM:
+                # adjust global dim to match model
+                global EMBEDDING_DIM
+                EMBEDDING_DIM = int(vec.size)
             return vec
-        # If model returned different dim (unlikely), adjust global var
+        # unexpected shape: flatten
+        vec = vec.reshape(-1).astype(np.float32)
         global EMBEDDING_DIM
         EMBEDDING_DIM = int(vec.size)
         return vec
@@ -128,13 +135,19 @@ def embed_batch(texts: List[str]) -> List[np.ndarray]:
     """
     if texts is None:
         raise TypeError("texts must be an iterable of strings")
+    if not isinstance(texts, (list, tuple)):
+        # allow other iterables by coercing to list
+        texts = list(texts)
+
     # sentence-transformers batch path
     if _USE_ST_MODEL and _st_model is not None:
         vecs = _st_model.encode(texts, convert_to_numpy=True)
         arr = np.asarray(vecs, dtype=np.float32)
-        # Ensure consistent shape and dim
         if arr.ndim == 1:
             arr = arr.reshape(1, -1)
+        # ensure global dim matches
+        global EMBEDDING_DIM
+        EMBEDDING_DIM = int(arr.shape[1])
         return [arr[i] for i in range(arr.shape[0])]
 
     # OpenAI batch path (creates multiple inputs in one call)

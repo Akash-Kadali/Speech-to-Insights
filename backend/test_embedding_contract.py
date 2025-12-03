@@ -1,6 +1,5 @@
+# backend/test_embedding_contract.py
 """
-backend/test_embedding_contract.py
-
 Pytest contract tests for the embedding module.
 
 Goals:
@@ -31,10 +30,10 @@ embedding = pytest.importorskip(
 
 # --- Helpers -----------------------------------------------------------------
 def _to_ndarray(vec):
-    """Coerce list/tuple to numpy array for consistent checks."""
+    """Coerce list/tuple or numpy-like to numpy array for consistent checks (dtype preserved when possible)."""
     if isinstance(vec, np.ndarray):
         return vec
-    return np.asarray(vec, dtype=float)
+    return np.asarray(vec)
 
 
 def _to_ndarray_strict(vec):
@@ -121,7 +120,7 @@ def test_embedding_returns_numeric_vector(text):
     assert arr.size > 0, "Embedding must contain at least one element"
     assert np.isfinite(arr).all(), "Embedding contains non-finite values (NaN/Inf)"
     # dtype check (allow float32 or float64)
-    assert arr.dtype in (np.float32, np.float64, float), f"Unexpected dtype {arr.dtype}"
+    assert arr.dtype.kind == "f", f"Unexpected dtype {arr.dtype}; embeddings should be floats"
 
 
 def test_infer_dimension_and_match_expected():
@@ -141,26 +140,52 @@ def test_infer_dimension_and_match_expected():
         assert dim == inferred_expected_dim, f"Embedding dimension {dim} != expected {inferred_expected_dim}"
 
 
+def _coerce_batch_to_ndarray(batch_out):
+    """
+    Coerce embed_batch output to a 2-D numpy array (n x d).
+    Accepts: numpy array (n,d), list of arrays/lists, generator.
+    """
+    if isinstance(batch_out, np.ndarray):
+        arr = batch_out
+    else:
+        try:
+            seq = list(batch_out)
+        except TypeError:
+            pytest.fail("embed_batch returned unexpected non-iterable type: %s" % type(batch_out))
+        # convert each item to ndarray, allow items that are numpy arrays or sequences
+        rows = []
+        for x in seq:
+            a = _to_ndarray(x)
+            if a.ndim != 1:
+                # try to flatten if possible
+                a = a.reshape(-1)
+            rows.append(a)
+        # ensure consistent dimension
+        lengths = [r.size for r in rows]
+        if len(set(lengths)) != 1:
+            pytest.fail(f"embed_batch returned rows with inconsistent dimensions: {lengths}")
+        arr = np.asarray([r for r in rows])
+    return arr
+
+
 def test_batch_behavior_and_shapes():
     """Batch call returns list/array of embeddings matching the number of inputs and expected dim."""
     texts = ["alpha", "beta", "gamma"]
     batch_out = embed_batch_fn(texts)
 
-    # Normalize output to numpy array of shape (n, d)
-    if isinstance(batch_out, np.ndarray):
-        arr = batch_out
-    else:
-        # Accept generators/iterables too by trying to coerce to a list
-        try:
-            seq = list(batch_out)
-        except TypeError:
-            pytest.fail("embed_batch returned unexpected non-iterable type: %s" % type(batch_out))
-        arr = np.asarray([_to_ndarray(x) for x in seq], dtype=float)
-
+    arr = _coerce_batch_to_ndarray(batch_out)
     assert arr.ndim == 2, f"Batch embeddings must be 2-D (n x dim). Got shape {arr.shape}"
     n, d = arr.shape
     assert n == len(texts), f"Batch produced {n} embeddings for {len(texts)} inputs"
-    assert d == inferred_expected_dim, f"Batch embedding dim {d} != expected {inferred_expected_dim}"
+    # set inferred_expected_dim if not yet set
+    global inferred_expected_dim
+    if inferred_expected_dim is None:
+        inferred_expected_dim = int(d)
+        assert inferred_expected_dim in DEFAULT_EXPECTED_DIMS, (
+            f"Inferred embedding dim {inferred_expected_dim} unusual. Set EMBEDDING_DIM if this is expected."
+        )
+    else:
+        assert d == inferred_expected_dim, f"Batch embedding dim {d} != expected {inferred_expected_dim}"
 
 
 def test_determinism_same_input():
@@ -206,15 +231,7 @@ def test_batch_consistency_with_single_calls():
     """Embedding a batch should be consistent with calling the single-item API repeatedly."""
     texts = ["one", "two", "three", "four"]
     batch = embed_batch_fn(texts)
-    # coerce batch to array safely
-    if isinstance(batch, np.ndarray):
-        batch_arr = batch.astype(float)
-    else:
-        try:
-            seq = list(batch)
-        except TypeError:
-            pytest.fail("embed_batch returned unexpected non-iterable type: %s" % type(batch))
-        batch_arr = np.asarray([_to_ndarray(x) for x in seq], dtype=float)
+    batch_arr = _coerce_batch_to_ndarray(batch).astype(float)
 
     singles = np.asarray([_to_ndarray(embed_fn(t)) for t in texts], dtype=float)
     assert batch_arr.shape == singles.shape, "Batch and repeated single calls produced different shapes"

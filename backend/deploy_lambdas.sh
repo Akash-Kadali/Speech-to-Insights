@@ -4,22 +4,22 @@ set -euo pipefail
 # deploy_lambdas.sh
 #
 # Package and deploy backend Lambda functions from the repository.
-# - Creates a zip of the backend/ directory (or a specified source dir)
+# - Creates a zip of the SOURCE_DIR (default backend)
 # - Uploads the zip to S3 (bucket/prefix)
 # - For each named Lambda function, either creates it (if missing) or updates its code
 # - Optionally updates environment variables and tags
 #
 # Usage examples:
-#   ./deploy_lambdas.sh --bucket my-deploy-bucket --prefix lambda-artifacts --functions lambda_handlers,whisper --role-arn arn:aws:iam::123:role/myLambdaRole
+#   ./deploy_lambdas.sh --bucket my-deploy-bucket --prefix lambda-artifacts --functions api_upload_handler,s3_event_handler --role-arn arn:aws:iam::123:role/myLambdaRole
 #   ./deploy_lambdas.sh --help
 #
 # Requirements:
 # - aws CLI configured with permissions to put objects to S3, create/update Lambda functions, and get functions
 # - zip installed
+# - jq required if using --handler-map JSON file
 #
 # Notes:
-# - This script is intentionally conservative: it will not overwrite an existing function's configuration
-#   except to update code. Pass --force-create to allow creation without role ARN (not recommended).
+# - This script will not override an existing function's role or VPC config.
 # - Provide ROLE_ARN for initial creation (create-function requires an execution role).
 # - You may set PACKAGE_NAME and SOURCE_DIR env vars to change defaults.
 #
@@ -27,7 +27,7 @@ set -euo pipefail
 # Defaults (can be overridden via env or CLI)
 PACKAGE_NAME="${PACKAGE_NAME:-speech_to_insights_backend.zip}"
 SOURCE_DIR="${SOURCE_DIR:-backend}"
-S3_REGION="${S3_REGION:-$(aws configure get region || echo us-east-1)}"
+S3_REGION="${S3_REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}"
 TAG_PROJECT="${TAG_PROJECT:-speech-to-insights}"
 TMPDIR="${TMPDIR:-/tmp}"
 FORCE_CREATE=false
@@ -41,13 +41,13 @@ Required:
   --prefix PREFIX            S3 prefix/folder for uploads
 
 Optional:
-  --functions F1,F2,...      Comma-separated list of lambda function names to deploy (default: all found in SOURCE_DIR/lambdas.txt)
+  --functions F1,F2,...      Comma-separated list of lambda function names to deploy
   --role-arn ARN             IAM role ARN to use when creating a new Lambda function
-  --handler-map MAP          Optional JSON file mapping function-name -> handler (default: "<function>.<handler>": lambda_handlers.api_upload_handler etc.)
+  --handler-map FILE         Optional JSON file mapping function-name -> handler (jq required)
   --runtime RUNTIME          Lambda runtime (default: python310)
   --memory MB                Memory size for created functions (default: 2048)
   --timeout SEC              Timeout for created functions (default: 300)
-  --env "KEY=VAL,KEY2=VAL2"  Comma separated env vars to set on create/update (update will merge)
+  --env "KEY=VAL,KEY2=VAL2"  Comma separated env vars to set on create/update (update will replace)
   --force-create             Allow create without role_arn (not recommended)
   --source-dir DIR           Source directory to package (default: backend)
   --package-name NAME        Output zip name (default: speech_to_insights_backend.zip)
@@ -107,14 +107,13 @@ if [[ -z "$FUNCTIONS_CSV" ]]; then
   fi
 fi
 
-# helper to create env var JSON for aws cli
+# helper to create env var JSON for aws cli (strict replacement)
 _make_env_json() {
   local env_csv="$1"
   if [[ -z "$env_csv" ]]; then
     echo ""
     return
   fi
-  # convert KEY=VAL,KEY2=VAL2 to JSON
   IFS=',' read -r -a kvs <<< "$env_csv"
   local json="{\"Variables\":{"
   local first=true
@@ -122,11 +121,13 @@ _make_env_json() {
     if [[ -z "$kv" ]]; then continue; fi
     key="${kv%%=*}"
     val="${kv#*=}"
+    # escape quotes
+    val_escaped="$(printf '%s' "$val" | sed 's/"/\\"/g')"
     if [[ "$first" = true ]]; then
-      json="${json}\"${key}\":\"${val}\""
+      json="${json}\"${key}\":\"${val_escaped}\""
       first=false
     else
-      json="${json},\"${key}\":\"${val}\""
+      json="${json},\"${key}\":\"${val_escaped}\""
     fi
   done
   json="${json}}}"
@@ -136,12 +137,21 @@ _make_env_json() {
 ENV_JSON=$(_make_env_json "${ENV_OVERRIDES}")
 
 echo "Packaging ${SOURCE_DIR} -> ${PACKAGE_NAME}"
-TMP_ZIP="${TMPDIR}/${PACKAGE_NAME}"
+TMP_ZIP="${TMPDIR%/}/${PACKAGE_NAME}"
 rm -f "${TMP_ZIP}"
+
+if [[ ! -d "${SOURCE_DIR}" ]]; then
+  echo "Source directory ${SOURCE_DIR} does not exist."
+  exit 3
+fi
+
 # create zip of the SOURCE_DIR contents, preserve relative paths
 (
+  set -x
   cd "${SOURCE_DIR}"
+  # -q: quiet, -r: recurse, -y: store symbolic links as the link
   zip -qry "${TMP_ZIP}" .
+  set +x
 )
 
 # Upload to S3
@@ -150,21 +160,17 @@ echo "Uploading artifact to s3://${AWS_S3_BUCKET}/${S3_KEY}"
 aws s3 cp "${TMP_ZIP}" "s3://${AWS_S3_BUCKET}/${S3_KEY}" --region "${S3_REGION}"
 
 # Default handler mapping: function_name -> "<module>.<handler>"
-# If user provided handler map file, load it (expects JSON map). Otherwise build sensible defaults.
 declare -A HANDLER_MAP
 if [[ -n "${HANDLER_MAP_FILE}" && -f "${HANDLER_MAP_FILE}" ]]; then
-  # read JSON into associative array (requires jq)
   if ! command -v jq >/dev/null 2>&1; then
     echo "handler-map requires jq to parse JSON. Install jq or omit --handler-map."
-    exit 3
+    exit 4
   fi
   while IFS="=" read -r k v; do
     HANDLER_MAP["$k"]="$v"
   done < <(jq -r "to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]" "${HANDLER_MAP_FILE}")
 else
-  # sensible defaults mapping to functions in backend.lambda_handlers
   for fn in "${FUNCTIONS_ARRAY[@]}"; do
-    # common patterns
     case "$fn" in
       api_upload_handler) HANDLER_MAP["$fn"]="backend.lambda_handlers.api_upload_handler" ;;
       s3_event_handler) HANDLER_MAP["$fn"]="backend.lambda_handlers.s3_event_handler" ;;
@@ -186,16 +192,17 @@ for fn in "${FUNCTIONS_ARRAY[@]}"; do
   echo "Processing function ${fn_trimmed} -> handler ${handler}"
 
   # check if function exists
-  if aws lambda get-function --function-name "${fn_trimmed}" >/dev/null 2>&1; then
+  if aws lambda get-function --function-name "${fn_trimmed}" --region "${S3_REGION}" >/dev/null 2>&1; then
     echo "Function ${fn_trimmed} exists. Updating code..."
     aws lambda update-function-code \
       --function-name "${fn_trimmed}" \
       --s3-bucket "${AWS_S3_BUCKET}" \
       --s3-key "${S3_KEY}" \
       --publish \
-      --region "${S3_REGION}"
-    echo "Updating function configuration (memory/timeout) for ${fn_trimmed}"
-    # update configuration (merge existing env vars with provided overrides if any)
+      --region "${S3_REGION}" >/dev/null
+
+    echo "Updating function configuration (memory/timeout/handler) for ${fn_trimmed}"
+    # update configuration (this replaces environment with provided map if present)
     if [[ -n "${ENV_JSON}" ]]; then
       aws lambda update-function-configuration \
         --function-name "${fn_trimmed}" \
@@ -217,43 +224,36 @@ for fn in "${FUNCTIONS_ARRAY[@]}"; do
     echo "Updated ${fn_trimmed} successfully."
   else
     echo "Function ${fn_trimmed} not found. Creating..."
-    if [[ -z "${ROLE_ARN}" ]] && [[ "${FORCE_CREATE}" != "true" ]]; then
+    if [[ -z "${ROLE_ARN}" && "${FORCE_CREATE}" != "true" ]]; then
       echo "Role ARN is required to create a new Lambda. Provide --role-arn or use --force-create to bypass (not recommended). Skipping ${fn_trimmed}."
       continue
     fi
 
-    # Create function
-    if [[ -n "${ENV_JSON}" ]]; then
-      aws lambda create-function \
-        --function-name "${fn_trimmed}" \
-        --runtime "${RUNTIME}" \
-        --role "${ROLE_ARN}" \
-        --handler "${handler}" \
-        --code "S3Bucket=${AWS_S3_BUCKET},S3Key=${S3_KEY}" \
-        --memory-size "${MEMORY}" \
-        --timeout "${TIMEOUT}" \
-        --publish \
-        --environment "${ENV_JSON}" \
-        --tags "Project=${TAG_PROJECT}" \
-        --region "${S3_REGION}"
-    else
-      aws lambda create-function \
-        --function-name "${fn_trimmed}" \
-        --runtime "${RUNTIME}" \
-        --role "${ROLE_ARN}" \
-        --handler "${handler}" \
-        --code "S3Bucket=${AWS_S3_BUCKET},S3Key=${S3_KEY}" \
-        --memory-size "${MEMORY}" \
-        --timeout "${TIMEOUT}" \
-        --publish \
-        --tags "Project=${TAG_PROJECT}" \
-        --region "${S3_REGION}"
+    # Create function; require ROLE_ARN unless force-create
+    create_cmd=(aws lambda create-function
+      --function-name "${fn_trimmed}"
+      --runtime "${RUNTIME}"
+      --handler "${handler}"
+      --code "S3Bucket=${AWS_S3_BUCKET},S3Key=${S3_KEY}"
+      --memory-size "${MEMORY}"
+      --timeout "${TIMEOUT}"
+      --publish
+      --tags "Project=${TAG_PROJECT}"
+      --region "${S3_REGION}"
+    )
+    if [[ -n "${ROLE_ARN}" ]]; then
+      create_cmd+=(--role "${ROLE_ARN}")
     fi
+    if [[ -n "${ENV_JSON}" ]]; then
+      create_cmd+=(--environment "${ENV_JSON}")
+    fi
+
+    # Run create command
+    "${create_cmd[@]}"
     echo "Created ${fn_trimmed}."
   fi
 
-  # Post-deploy: optionally publish alias 'prod' to point to latest version
-  # get latest version
+  # Optionally report published version
   latest_ver=$(aws lambda get-function-configuration --function-name "${fn_trimmed}" --region "${S3_REGION}" --query 'Version' --output text 2>/dev/null || echo "\$LATEST")
   if [[ "${latest_ver}" != "\$LATEST" ]]; then
     echo "Published version ${latest_ver} for ${fn_trimmed}"

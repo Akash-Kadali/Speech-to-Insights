@@ -1,119 +1,176 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Home</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Speech to Insights — upload meetings, run semantic search, and explore analytics. MSML 650 term project." />
+  <meta name="author" content="Sri Akash Kadali" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Base design system (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/style.css">
-
-  <!-- Theme (defaults to light) -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
-
 <body>
-  <!-- NAVIGATION BAR -->
-  <nav>
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" role="navigation" aria-label="Primary">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h1>Speech to Insights</h1>
-        <p>Turn conversations into knowledge.</p>
+        <h2>Overview</h2>
+        <p class="muted">Turn conversations into knowledge</p>
       </div>
     </div>
 
-    <ul>
-      <li><a href="index.html" class="active">Overview</a></li>
-      <li><a href="upload.html">Upload</a></li>
-      <li><a href="search.html">Search</a></li>
-      <li><a href="sessions.html">Sessions</a></li>
-      <li><a href="analytics.html">Analytics</a></li>
-      <li><a href="profile.html">Profile</a></li>
-      <li><a href="admin.html">Admin</a></li>
-      <li><a href="help.html">Help</a></li>
-      <li><a href="about.html">About</a></li>
-      <li><a href="contact.html">Contact</a></li>
-    </ul>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html" class="active" aria-current="page">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
 
-    <div class="nav-footer">
-      <button id="theme-toggle" class="cta-secondary">Toggle Theme</button>
-    </div>
-  </nav>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
+  </aside>
 
   <!-- MAIN CONTENT -->
-  <main class="page-enter">
-    <section class="hero">
-      <h2 class="gradient-text">Automatic insights from your conversations.</h2>
-      <p class="hero-subtitle">
-        Upload calls, analyze them with semantic search, and explore rich analytics.
-      </p>
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="hero-heading">
+    <div class="main-inner">
+      <header class="page-header">
+        <h1 id="hero-heading" class="page-title gradient-text">Automatic insights from your conversations.</h1>
+        <p class="page-subtitle">Upload calls, analyze them with semantic search, and explore rich analytics.</p>
+      </header>
 
-      <div class="hero-actions">
-        <a href="upload.html" class="cta-primary">Upload a Meeting</a>
-        <a href="search.html" class="cta-secondary">Semantic Search</a>
-      </div>
-    </section>
+      <section class="card hero-card" aria-labelledby="hero-actions">
+        <div class="hero-actions" id="hero-actions" role="region" aria-label="Primary actions">
+          <a href="/upload.html" class="cta-primary" role="button">Upload a Meeting</a>
+          <a href="/search.html" class="cta-secondary" role="button">Semantic Search</a>
+        </div>
+      </section>
 
-    <section class="grid">
-      <article class="card hover-lift">
-        <h3>Smart Uploads</h3>
-        <p>
-          Upload audio or transcripts and automatically extract structure and metadata.
-        </p>
-      </article>
+      <section class="card" aria-labelledby="features-heading">
+        <h2 id="features-heading">Core features</h2>
+        <div class="grid three-up gap-md" role="list">
+          <article class="card hover-lift" role="listitem" aria-labelledby="feature-uploads">
+            <h3 id="feature-uploads">Smart Uploads</h3>
+            <p>Upload audio or transcripts and automatically extract structure and metadata.</p>
+          </article>
 
-      <article class="card hover-lift">
-        <h3>Semantic Search</h3>
-        <p>
-          Find decisions, action items, risks, owners, and topics across all sessions.
-        </p>
-      </article>
+          <article class="card hover-lift" role="listitem" aria-labelledby="feature-search">
+            <h3 id="feature-search">Semantic Search</h3>
+            <p>Find decisions, action items, risks, owners, and topics across all sessions.</p>
+          </article>
 
-      <article class="card hover-lift">
-        <h3>Analytics Dashboard</h3>
-        <p>
-          Visualize trends, keyword patterns, speaker activity, and sentiment.
-        </p>
-      </article>
-    </section>
+          <article class="card hover-lift" role="listitem" aria-labelledby="feature-analytics">
+            <h3 id="feature-analytics">Analytics Dashboard</h3>
+            <p>Visualize trends, keyword patterns, speaker activity, and sentiment.</p>
+          </article>
+        </div>
+      </section>
 
-    <section class="grid">
-      <article class="card hover-lift">
-        <h3>Session Archive</h3>
-        <p>
-          Access previous meetings with clean transcripts, summaries, and highlights.
-        </p>
-      </article>
+      <section class="card" aria-labelledby="more-heading">
+        <h2 id="more-heading">More</h2>
+        <div class="grid three-up gap-md" role="list">
+          <article class="card hover-lift" role="listitem">
+            <h3>Session Archive</h3>
+            <p>Access previous meetings with clean transcripts, summaries, and highlights.</p>
+          </article>
 
-      <article class="card hover-lift">
-        <h3>Your Profile</h3>
-        <p>
-          Manage preferences, themes, and default filters for your workspace.
-        </p>
-      </article>
+          <article class="card hover-lift" role="listitem">
+            <h3>Your Profile</h3>
+            <p>Manage preferences, themes, and default filters for your workspace.</p>
+          </article>
 
-      <article class="card hover-lift">
-        <h3>Admin Tools</h3>
-        <p>
-          Monitor the processing queue and manage demo data for presentations.
-        </p>
-      </article>
-    </section>
+          <article class="card hover-lift" role="listitem">
+            <h3>Admin Tools</h3>
+            <p>Monitor the processing queue and manage demo data for presentations.</p>
+          </article>
+        </div>
+      </section>
+    </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
-  <!-- Toast Notification -->
-  <div id="toast" aria-live="polite"></div>
+  <!-- Toast area -->
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status" class="toast-container" hidden></div>
 
-  <!-- JS PATH FIXED -->
-  <script src="js/main.js"></script>
+  <!-- Primary JS (deferred so DOM is available). -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+
+  <!-- Defensive inline fallback (theme & toast) -->
+  <script>
+    (function () {
+      function ensureToast() {
+        if (typeof window.showToast === 'function') return;
+        window.showToast = function (message, timeout) {
+          try {
+            var t = document.getElementById('toast');
+            if (!t) { alert(message); return; }
+            t.hidden = false;
+            t.textContent = String(message || '');
+            t.classList.add('visible');
+            timeout = typeof timeout === 'number' ? timeout : 3000;
+            setTimeout(function () { t.classList.remove('visible'); t.hidden = true; }, timeout);
+          } catch (e) { try { alert(message); } catch (_) {} }
+        };
+      }
+
+      function safeInit() {
+        ensureToast();
+
+        // Theme toggle fallback + restore persisted preference
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
+          themeToggle.addEventListener('click', function () {
+            try {
+              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              themeLink.setAttribute('href', next);
+              themeToggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle error', e); }
+          }, { passive: true });
+
+          // restore saved theme
+          try {
+            var saved = localStorage.getItem('sti-theme');
+            if (saved) themeLink.setAttribute('href', saved);
+          } catch (e) {}
+          themeToggle.__fallbackAttached = true;
+        }
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeInit);
+      else safeInit();
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled. Core interactive features will be limited.
+    </div>
+  </noscript>
 </body>
 </html>

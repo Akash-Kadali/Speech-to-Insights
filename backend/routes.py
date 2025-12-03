@@ -1,6 +1,5 @@
+# backend/routes.py
 """
-backend/routes.py
-
 FastAPI routes for the speech_to_insights project.
 
 Upgrades / new features included:
@@ -60,6 +59,10 @@ except Exception:
 logger = logging.getLogger("routes")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(ch)
 
 app = FastAPI(title="speech_to_insights API")
 
@@ -92,10 +95,10 @@ _MAX_REALTIME_BYTES = os.getenv("MAX_REALTIME_BYTES", "5242880")
 try:
     MAX_REALTIME_BYTES = int(_MAX_REALTIME_BYTES)
 except Exception:
-    MAX_REALTIME_BYTES = 5242880
+    MAX_REALTIME_BYTES = 5 * 1024 * 1024
 
 if not S3_INPUT_BUCKET:
-    logger.warning("No TRANSFORM_INPUT_BUCKET configured. /upload and presign will fail unless bucket provided.")
+    logger.warning("No TRANSFORM_INPUT_BUCKET configured. /upload and /presign will fail unless bucket provided.")
 
 # Lazy boto3 S3 client
 _s3_client = None
@@ -106,7 +109,8 @@ def _get_s3_client():
     if _s3_client is None:
         if not _BOTO3_AVAILABLE:
             raise RuntimeError("boto3 is not available in this environment")
-        _s3_client = boto3.client("s3")
+        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+        _s3_client = boto3.client("s3", region_name=region) if region else boto3.client("s3")
     return _s3_client
 
 
@@ -128,18 +132,26 @@ async def upload_audio(
     Query param start_workflow=true will attempt to start a Step Functions execution if configured.
     """
     background_tasks = background_tasks or BackgroundTasks()
+
     if file is None:
         raise HTTPException(status_code=400, detail="Missing file")
 
-    # Normalize content type and filename
-    content_type = (file.content_type or None)
+    content_type = file.content_type or None
     filename = file.filename or f"upload-{int(time.time())}.bin"
 
-    # If handlers exist, delegate full responsibility (preferred)
+    # Read payload once into memory (ok for demo / small files). Replace with stream-to-tempfile if needed.
+    try:
+        body = await file.read()
+    except Exception as e:
+        logger.exception("Failed to read upload file: %s", e)
+        raise HTTPException(status_code=400, detail="Unable to read uploaded file")
+
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+    # If handlers exist, let them handle presign/upload/workflow
     if handlers and getattr(handlers, "handle_upload_fileobj", None):
         try:
-            # Read into BytesIO and pass fileobj to handlers
-            body = await file.read()
             bio = io.BytesIO(body)
             res = handlers.handle_upload_fileobj(
                 fileobj=bio,
@@ -156,30 +168,31 @@ async def upload_audio(
             logger.exception("Upload failed in handlers: %s", exc)
             raise HTTPException(status_code=500, detail=str(exc))
 
-    # Fallback behaviour if handlers not available: upload directly to S3
+    # Fallback: upload directly to S3
     if not S3_INPUT_BUCKET:
         raise HTTPException(status_code=500, detail="Server misconfigured: no TRANSFORM_INPUT_BUCKET")
 
+    run_id = uuid.uuid4().hex
+    key = _s3_key_for_upload(filename, prefix=S3_INPUT_PREFIX, run_id=run_id)
     try:
-        run_id = uuid.uuid4().hex
-        key = _s3_key_for_upload(filename, prefix=S3_INPUT_PREFIX, run_id=run_id)
         s3 = _get_s3_client()
-        try:
-            # reset pointer and upload
-            file.file.seek(0)
-        except Exception:
-            pass
-        # boto3 upload_fileobj expects a file-like object with read/seek
-        try:
-            s3.upload_fileobj(Fileobj=file.file, Bucket=S3_INPUT_BUCKET, Key=key, ExtraArgs={"ContentType": content_type} if content_type else None)
-        except TypeError:
-            # some boto3 versions don't accept None for ExtraArgs
-            if content_type:
-                s3.upload_fileobj(Fileobj=file.file, Bucket=S3_INPUT_BUCKET, Key=key, ExtraArgs={"ContentType": content_type})
-            else:
-                s3.upload_fileobj(Fileobj=file.file, Bucket=S3_INPUT_BUCKET, Key=key)
+        bio = io.BytesIO(body)
+        extra_args = {"ContentType": content_type} if content_type else {}
+        # boto3 upload_fileobj won't accept empty dict for ExtraArgs in some versions, so pass conditionally
+        if extra_args:
+            s3.upload_fileobj(Fileobj=bio, Bucket=S3_INPUT_BUCKET, Key=key, ExtraArgs=extra_args)
+        else:
+            s3.upload_fileobj(Fileobj=bio, Bucket=S3_INPUT_BUCKET, Key=key)
         s3_uri = f"s3://{S3_INPUT_BUCKET}/{key}"
-        result = {"ok": True, "upload_id": run_id, "s3_uri": s3_uri, "s3_bucket": S3_INPUT_BUCKET, "s3_key": key, "status": "uploaded"}
+        result = {
+            "ok": True,
+            "upload_id": run_id,
+            "s3_uri": s3_uri,
+            "s3_bucket": S3_INPUT_BUCKET,
+            "s3_key": key,
+            "status": "uploaded",
+            "size_bytes": len(body),
+        }
     except ClientError as e:
         logger.exception("S3 upload failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -187,7 +200,7 @@ async def upload_audio(
         logger.exception("Unexpected upload error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # If we have step function starters, optionally start workflow
+    # If configured, start workflow (best-effort)
     if start_workflow and sf_handlers and STATE_MACHINE_ARN and getattr(sf_handlers, "start_state_machine_execution", None):
         try:
             exec_resp = sf_handlers.start_state_machine_execution({"audio_s3_uri": s3_uri, "run_id": run_id})
@@ -208,12 +221,12 @@ def presign_put(filename: str, content_type: Optional[str] = None, expires_in: i
     """
     if handlers and getattr(handlers, "handle_upload_fileobj", None):
         try:
-            # handlers supports presign flow
             res = handlers.handle_upload_fileobj(
                 fileobj=None,
                 filename=filename,
                 presign=True,
                 content_type=content_type,
+                expires_in=expires_in,
             )
             return JSONResponse(status_code=200, content=res)
         except Exception as exc:
@@ -231,10 +244,13 @@ def presign_put(filename: str, content_type: Optional[str] = None, expires_in: i
         if content_type:
             params["ContentType"] = content_type
         url = s3.generate_presigned_url(ClientMethod="put_object", Params=params, ExpiresIn=int(expires_in))
-        return {"url": url, "s3_uri": f"s3://{S3_INPUT_BUCKET}/{key}", "upload_id": run_id}
+        return JSONResponse(status_code=200, content={"url": url, "s3_uri": f"s3://{S3_INPUT_BUCKET}/{key}", "upload_id": run_id})
     except ClientError as e:
         logger.exception("Failed generating presigned url: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.exception("Failed generating presigned url: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/start-workflow")
@@ -257,6 +273,8 @@ def start_workflow(body: dict = Body(...)):
         if not resp.get("ok", True):
             raise RuntimeError(resp.get("error", "workflow_start_failed"))
         return JSONResponse(status_code=202, content={"status": "started", "execution": resp.get("execution", resp)})
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Failed to start workflow: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -271,6 +289,8 @@ def status(upload_id: str):
         try:
             res = handlers.fetch_result_if_exists(upload_id)
             return JSONResponse(status_code=200, content=res)
+        except HTTPException:
+            raise
         except Exception as exc:
             logger.exception("fetch_result_if_exists failed: %s", exc)
             raise HTTPException(status_code=500, detail=str(exc))
@@ -285,15 +305,18 @@ def status(upload_id: str):
         body = resp["Body"].read()
         try:
             obj = json.loads(body.decode("utf-8"))
-            return {"found": True, "result": obj}
+            return JSONResponse(status_code=200, content={"found": True, "result": obj})
         except Exception:
-            return {"found": True, "result_raw": body.decode("utf-8", errors="replace")}
+            return JSONResponse(status_code=200, content={"found": True, "result_raw": body.decode("utf-8", errors="replace")})
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code", "")
         if code in ("NoSuchKey", "NoSuchBucket", "404"):
-            return {"found": False}
+            return JSONResponse(status_code=200, content={"found": False})
         logger.exception("S3 error while fetching status: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        logger.exception("Unexpected error fetching status: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.get("/health")
@@ -311,8 +334,21 @@ def health():
         else:
             out["s3_input_bucket_ok"] = bool(S3_INPUT_BUCKET)
     except Exception:
+        logger.exception("S3 input bucket check failed")
         out["s3_input_bucket_ok"] = False
+
+    # OUTPUT bucket check
+    try:
+        if OUTPUT_S3_BUCKET and _BOTO3_AVAILABLE:
+            s3 = _get_s3_client()
+            s3.list_objects_v2(Bucket=OUTPUT_S3_BUCKET, MaxKeys=1)
+            out["output_s3_bucket_ok"] = True
+        else:
+            out["output_s3_bucket_ok"] = bool(OUTPUT_S3_BUCKET)
+    except Exception:
+        logger.exception("S3 output bucket check failed")
+        out["output_s3_bucket_ok"] = False
 
     out["step_functions_configured"] = bool(STATE_MACHINE_ARN)
     out["handlers_available"] = handlers is not None
-    return out
+    return JSONResponse(status_code=200, content=out)

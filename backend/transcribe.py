@@ -1,6 +1,6 @@
-"""
-backend/transcribe.py
+# backend/transcribe.py
 
+"""
 Orchestration layer for ingestion -> preprocessing -> transcription.
 
 Responsibilities
@@ -28,8 +28,9 @@ import logging
 import subprocess
 import tempfile
 import shutil
+import mimetypes
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 
 # boto3 import defensively (some test environments won't have AWS SDK)
 try:
@@ -49,7 +50,7 @@ except Exception:
     whisper_module = None  # type: ignore
 
 logger = logging.getLogger("transcribe")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 if not logger.handlers:
     ch = logging.StreamHandler()
     ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
@@ -64,7 +65,12 @@ def _get_s3_client():
     if _s3_client is None:
         if not _BOTO3_AVAILABLE:
             raise RuntimeError("boto3 is not available in this environment")
-        _s3_client = boto3.client("s3")
+        # allow region override by env
+        region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+        if region:
+            _s3_client = boto3.client("s3", region_name=region)
+        else:
+            _s3_client = boto3.client("s3")
     return _s3_client
 
 
@@ -193,7 +199,7 @@ def transcribe_local_file(
     s3_output_prefix: Optional[str] = None,
     realtime_threshold_bytes: Optional[int] = None,
     kick_off_transform: bool = True,
-) -> Dict:
+) -> Dict[str, Any]:
     """
     Transcribe a local audio file.
 
@@ -240,20 +246,20 @@ def transcribe_local_file(
 
             # If S3 configured, upload chunks
             if s3_output_bucket:
-                s3_inputs = []
+                s3_inputs: List[str] = []
                 for cp in chunk_paths:
                     key_prefix = (s3_output_prefix.rstrip("/") + "/") if s3_output_prefix else ""
                     s3_key = f"{key_prefix}inputs/{Path(cp).name}"
                     s3_uri = upload_file_to_s3(cp, s3_output_bucket, s3_key)
                     s3_inputs.append(s3_uri)
 
-                result = {"mode": "uploaded_chunks", "s3_inputs": s3_inputs, "num_chunks": len(s3_inputs)}
+                result: Dict[str, Any] = {"mode": "uploaded_chunks", "s3_inputs": s3_inputs, "num_chunks": len(s3_inputs)}
                 # Caller can start transforms separately; keep behavior conservative
                 result["note"] = "chunks_uploaded"
                 return result
             else:
                 # No S3: attempt realtime per chunk if transcribe_bytes_realtime available
-                results = []
+                results: List[Dict[str, Any]] = []
                 for cp in chunk_paths:
                     size = Path(cp).stat().st_size
                     if size <= threshold and whisper_module and getattr(whisper_module, "transcribe_bytes_realtime", None):
@@ -305,7 +311,7 @@ def transcribe_local_file(
                 logger.debug("Failed to remove tmp dir %s", tmp_dir)
 
 
-def transcribe_s3_uri(s3_uri: str) -> Dict:
+def transcribe_s3_uri(s3_uri: str) -> Dict[str, Any]:
     """
     Given an s3://bucket/key, call whisper.process_s3_event_and_transcribe to decide realtime vs transform.
     Returns the whisper result (or raises if whisper_module not available).

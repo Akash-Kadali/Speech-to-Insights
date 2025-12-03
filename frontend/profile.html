@@ -1,70 +1,77 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Profile</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Profile and settings for the Speech to Insights demo project." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Profile</h2>
-        <p>Settings & preferences.</p>
+        <p class="muted">Settings &amp; preferences</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html" class="active">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html" class="active" aria-current="page">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONSOLE AREA -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
     <div class="main-inner">
-
       <!-- HEADER -->
       <header class="page-header">
-        <h1 class="page-title">Profile & Settings</h1>
+        <h1 id="page-title" class="page-title">Profile &amp; Settings</h1>
         <p class="page-subtitle">
-          Update your display preferences, default filters, and notification settings.
+          Update display preferences, default filters, and notification settings.
         </p>
       </header>
 
       <!-- PROFILE FORM -->
-      <section class="card">
-        <form id="profile-form">
+      <section class="card" aria-labelledby="profile-heading">
+        <h2 id="profile-heading">Profile Settings</h2>
 
+        <form id="profile-form" name="profile-form" novalidate>
           <div class="field">
             <label for="display-name">Display name</label>
             <input
               type="text"
               id="display-name"
+              name="display-name"
               placeholder="Your name"
-            >
+              autocomplete="name"
+              aria-label="Display name"
+            />
           </div>
 
           <div class="field">
@@ -72,61 +79,178 @@
             <input
               type="email"
               id="email"
+              name="email"
               placeholder="you@example.com"
-            >
+              autocomplete="email"
+              aria-label="Email address"
+            />
           </div>
 
           <div class="field">
             <label for="default-range">Default date range</label>
-            <select id="default-range">
+            <select id="default-range" name="default-range" aria-label="Default date range">
               <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
+              <option value="30d" selected>Last 30 days</option>
               <option value="90d">Last 90 days</option>
               <option value="all">All time</option>
             </select>
           </div>
 
           <div class="field checkbox-field">
-            <label>
-              <input type="checkbox" id="email-updates">
-              Send me a weekly summary.
+            <label class="checkbox-label" for="email-updates">
+              <input type="checkbox" id="email-updates" name="email-updates" aria-label="Send weekly summary" />
+              Send me a weekly summary
             </label>
           </div>
 
           <div class="actions">
             <button type="submit" class="cta-primary">Save Settings</button>
+            <button type="reset" class="cta-ghost">Reset</button>
           </div>
-
         </form>
       </section>
 
       <!-- PROFILE INFO CARD -->
-      <section class="card">
-        <h2>Account Info</h2>
+      <section class="card" aria-labelledby="account-heading">
+        <h2 id="account-heading">Account Info</h2>
         <p class="muted">
-          This project does not use real authentication.  
-          This section is only for demonstration.
+          This project does not use real authentication. This section is for demonstration only.
         </p>
         <ul class="list subtle">
           <li>Account type: <strong>Student Project</strong></li>
-          <li>Role: <strong>Administrator</strong></li>
+          <li>Role: <strong>Administrator (demo)</strong></li>
         </ul>
       </section>
-
     </div>
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
   <!-- Toast Notification -->
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- JS PATHS FIXED -->
-  <script src="js/main.js"></script>
-  <script src="js/profile.js"></script>
+  <!-- Primary JS (deferred so DOM is available). -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/profile.js"></script>
 
+  <!-- Defensive inline script: safe fallbacks if external scripts are missing -->
+  <script>
+    (function () {
+      function safeToast(message, timeout) {
+        if (typeof window.showToast === 'function') {
+          window.showToast(message, timeout);
+          return;
+        }
+        try {
+          var toast = document.getElementById('toast');
+          if (!toast) { alert(message); return; }
+          toast.textContent = String(message || '');
+          toast.classList.add('visible');
+          timeout = typeof timeout === 'number' ? timeout : 3000;
+          setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+        } catch (e) { try { alert(message); } catch (_) {} }
+      }
+
+      function isValidEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      }
+
+      function safeInit() {
+        // Theme toggle fallback + restore saved theme
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
+          themeToggle.addEventListener('click', function () {
+            try {
+              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              themeLink.setAttribute('href', next);
+              themeToggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle fallback error', e); }
+          }, { passive: true });
+          themeToggle.__fallbackAttached = true;
+
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+        }
+
+        // Profile form fallback logic if profile.js didn't wire it
+        var form = document.getElementById('profile-form');
+        if (!form) return;
+        if (form.__handled) {
+          // allow profile.js to take over
+          try { restoreProfileFromStorage(); } catch (e) {}
+          return;
+        }
+
+        // restore on load
+        try {
+          var stored = localStorage.getItem('sti-profile');
+          if (stored) {
+            var parsed = JSON.parse(stored);
+            if (parsed && typeof parsed === 'object') {
+              if (parsed.displayName) document.getElementById('display-name').value = parsed.displayName;
+              if (parsed.email) document.getElementById('email').value = parsed.email;
+              if (parsed.defaultRange) document.getElementById('default-range').value = parsed.defaultRange;
+              if (typeof parsed.emailUpdates === 'boolean') document.getElementById('email-updates').checked = parsed.emailUpdates;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to restore profile from localStorage', e);
+        }
+
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var name = (document.getElementById('display-name') || {}).value || '';
+          var email = (document.getElementById('email') || {}).value || '';
+          var range = (document.getElementById('default-range') || {}).value || '30d';
+          var updates = !!(document.getElementById('email-updates') || {}).checked;
+
+          if (!name.trim()) {
+            safeToast('Please enter a display name.', 2200);
+            return;
+          }
+          if (!email.trim()) {
+            safeToast('Please enter an email address.', 2200);
+            return;
+          }
+          if (!isValidEmail(email.trim())) {
+            safeToast('Please enter a valid email address.', 2200);
+            return;
+          }
+
+          var settings = { displayName: name.trim(), email: email.trim(), defaultRange: range, emailUpdates: updates };
+          try {
+            localStorage.setItem('sti-profile', JSON.stringify(settings));
+            safeToast('Settings saved (demo)', 1600);
+          } catch (err) {
+            console.warn('persist failed', err);
+            safeToast('Failed to save settings locally', 1800);
+          }
+        }, { passive: false });
+
+        form.__handled = true;
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeInit);
+      else safeInit();
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Profile features require JavaScript to function.
+    </div>
+  </noscript>
 </body>
 </html>

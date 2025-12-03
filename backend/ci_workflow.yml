@@ -7,6 +7,7 @@
 #
 # Configure repository secrets and set enable_deploy=true on the workflow_dispatch input to run deployment steps.
 #
+
 name: CI
 
 on:
@@ -29,7 +30,8 @@ env:
   PYTHON_VERSION: '3.11'
   PACKAGE_NAME: 'speech_to_insights_backend.zip'
   SOURCE_DIR: 'backend'
-  S3_ARTIFACT_PREFIX: '${{ github.event.inputs.DEPLOY_S3_PREFIX || github.event.inputs.S3_PREFIX || "lambda-artifacts" }}'
+  # We'll compute S3 prefix in-run if not provided via inputs/secrets; keep a simple default here.
+  S3_ARTIFACT_PREFIX: 'lambda-artifacts'
 
 permissions:
   contents: read
@@ -64,8 +66,10 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f backend/requirements.txt ]; then
             pip install -r backend/requirements.txt
-          else
+          elif [ -f requirements.txt ]; then
             pip install -r requirements.txt || true
+          else
+            echo "No requirements file found; continuing"
           fi
 
   lint:
@@ -139,8 +143,13 @@ jobs:
           PKG="${{ env.PACKAGE_NAME }}"
           SRCDIR="${{ env.SOURCE_DIR }}"
           rm -f "/tmp/${PKG}"
-          (cd "$SRCDIR" && zip -qry "/tmp/${PKG}" .)
-          echo "artifact-path=/tmp/${PKG}" >> "$GITHUB_OUTPUT"
+          if [ -d "$SRCDIR" ]; then
+            (cd "$SRCDIR" && zip -qry "/tmp/${PKG}" .)
+            echo "artifact-path=/tmp/${PKG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Source dir ${SRCDIR} not found" >&2
+            exit 2
+          fi
 
       - name: Upload artifact to workflow
         uses: actions/upload-artifact@v4
@@ -175,10 +184,11 @@ jobs:
         run: |
           ARTIFACT="/tmp/${{ env.PACKAGE_NAME }}"
           S3_BUCKET="${{ secrets.DEPLOY_S3_BUCKET }}"
-          S3_PREFIX="${{ env.S3_ARTIFACT_PREFIX }}"
-          S3_KEY="${S3_PREFIX%/}/${{ env.PACKAGE_NAME }}"
+          # prefer an explicit input prefix from dispatch, fall back to secret DEPLOY_S3_PREFIX or env default
+          S3_PREFIX_INPUT="${{ github.event.inputs.DEPLOY_S3_PREFIX || secrets.DEPLOY_S3_PREFIX || env.S3_ARTIFACT_PREFIX }}"
+          S3_KEY="${S3_PREFIX_INPUT%/}/${{ env.PACKAGE_NAME }}"
           aws s3 cp "$ARTIFACT" "s3://${S3_BUCKET}/${S3_KEY}"
-          echo "s3://$S3_BUCKET/$S3_KEY" > /tmp/artifact_s3_uri
+          echo "artifact_s3_uri=s3://${S3_BUCKET}/${S3_KEY}" >> "$GITHUB_OUTPUT"
           echo "s3_key=${S3_KEY}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy Lambdas using script
@@ -191,10 +201,9 @@ jobs:
           TMPDIR: /tmp
         run: |
           set -e
-          # Provide role ARN and other options via secrets or inputs
           ROLE_ARN="${{ secrets.LAMBDA_ROLE_ARN }}"
           S3_BUCKET="${{ secrets.DEPLOY_S3_BUCKET }}"
-          S3_PREFIX="${{ env.S3_ARTIFACT_PREFIX }}"
+          S3_PREFIX="${{ github.event.inputs.DEPLOY_S3_PREFIX || secrets.DEPLOY_S3_PREFIX || env.S3_ARTIFACT_PREFIX }}"
           chmod +x backend/deploy_lambdas.sh
           ./backend/deploy_lambdas.sh --bucket "$S3_BUCKET" --prefix "$S3_PREFIX" --role-arn "$ROLE_ARN" --source-dir "$SOURCE_DIR"
 
@@ -209,4 +218,3 @@ jobs:
     steps:
       - name: Build status summary
         run: echo "Build and deploy finished for ${{ github.sha }} on ${{ github.ref }}"
-

@@ -1,6 +1,5 @@
+# backend/lambda_handlers.py
 """
-backend/lambda_handlers.py
-
 Collection of Lambda-compatible handlers for speech_to_insights.
 
 Upgrades included:
@@ -64,6 +63,10 @@ except Exception:
 logger = logging.getLogger("lambda_handlers")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(ch)
 
 # Configuration via env
 TRANSFORM_INPUT_BUCKET = os.getenv("TRANSFORM_INPUT_BUCKET") or os.getenv("INPUT_S3_BUCKET")
@@ -87,12 +90,17 @@ _sfn = None
 _sts = None
 
 
+def _boto_region_kwargs() -> dict:
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    return {"region_name": region} if region else {}
+
+
 def _get_s3():
     global _s3
     if _s3 is None:
         if not _BOTO3_AVAILABLE:
             raise RuntimeError("boto3 is not available in this environment")
-        _s3 = boto3.client("s3")
+        _s3 = boto3.client("s3", **_boto_region_kwargs())
     return _s3
 
 
@@ -101,7 +109,7 @@ def _get_sfn():
     if _sfn is None:
         if not _BOTO3_AVAILABLE:
             raise RuntimeError("boto3 is not available in this environment")
-        _sfn = boto3.client("stepfunctions")
+        _sfn = boto3.client("stepfunctions", **_boto_region_kwargs())
     return _sfn
 
 
@@ -118,9 +126,13 @@ def _upload_bytes_to_s3(data: bytes, bucket: str, key: str, content_type: Option
     extra_args = {"ContentType": content_type} if content_type else {}
     try:
         s3 = _get_s3()
-        s3.put_object(Bucket=bucket, Key=key, Body=data, **(extra_args or {}))
-    except ClientError:
-        logger.exception("S3 put_object failed for s3://%s/%s", bucket, key)
+        # Use put_object for simplicity (small objects); consider multipart for large uploads
+        if extra_args:
+            s3.put_object(Bucket=bucket, Key=key, Body=data, **extra_args)
+        else:
+            s3.put_object(Bucket=bucket, Key=key, Body=data)
+    except ClientError as e:
+        logger.exception("S3 put_object failed for s3://%s/%s: %s", bucket, key, e)
         raise
     return f"s3://{bucket}/{key}"
 
@@ -135,8 +147,8 @@ def _generate_presigned_put(bucket: str, key: str, expires_in: int = PRESIGN_URL
         s3 = _get_s3()
         url = s3.generate_presigned_url("put_object", Params=params, ExpiresIn=int(expires_in))
         return {"url": url, "s3_uri": f"s3://{bucket}/{key}"}
-    except ClientError:
-        logger.exception("Failed to generate presigned URL for s3://%s/%s", bucket, key)
+    except ClientError as e:
+        logger.exception("Failed to generate presigned URL for s3://%s/%s: %s", bucket, key, e)
         raise
 
 
@@ -221,6 +233,7 @@ def _maybe_start_workflow(s3_uri: str, run_id: str, metadata: Optional[Dict[str,
 # Lambda handlers
 # -----------------------
 
+
 def api_upload_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
     """
     API Gateway-compatible Lambda to accept uploads or S3 references.
@@ -286,9 +299,10 @@ def api_upload_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
         try:
             s3_uri = _upload_bytes_to_s3(audio_bytes, TRANSFORM_INPUT_BUCKET, key, content_type=content_type)
         except Exception as exc:
+            logger.exception("S3 upload failed: %s", exc)
             return {"status": "error", "error": f"s3_upload_failed: {exc}"}
 
-        result: Dict[str, Any] = {"upload_id": run_id, "s3_uri": s3_uri, "s3_bucket": TRANSFORM_INPUT_BUCKET, "s3_key": key}
+        result: Dict[str, Any] = {"upload_id": run_id, "s3_uri": s3_uri, "s3_bucket": TRANSFORM_INPUT_BUCKET, "s3_key": key, "size_bytes": len(audio_bytes)}
 
         # Inline realtime transcription for small payloads if whisper realtime is available
         try:
@@ -427,11 +441,23 @@ def health_handler(event: Dict[str, Any], context=None) -> Dict[str, Any]:
             s3.list_objects_v2(Bucket=TRANSFORM_INPUT_BUCKET, MaxKeys=1)
             out["s3_input_bucket_ok"] = True
         else:
-            out["s3_input_bucket_ok"] = False
+            out["s3_input_bucket_ok"] = bool(TRANSFORM_INPUT_BUCKET)
     except Exception:
         out["s3_input_bucket_ok"] = False
+
+    # check output bucket availability
+    try:
+        if TRANSFORM_OUTPUT_BUCKET and _BOTO3_AVAILABLE:
+            s3 = _get_s3()
+            s3.list_objects_v2(Bucket=TRANSFORM_OUTPUT_BUCKET, MaxKeys=1)
+            out["s3_output_bucket_ok"] = True
+        else:
+            out["s3_output_bucket_ok"] = bool(TRANSFORM_OUTPUT_BUCKET)
+    except Exception:
+        out["s3_output_bucket_ok"] = False
 
     out["step_functions_configured"] = bool(STATE_MACHINE_ARN)
     out["whisper_available"] = whisper_module is not None
     out["transcribe_available"] = transcribe_module is not None
+    out["pii_detector_available"] = pii_detector is not None
     return out

@@ -1,74 +1,80 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
   <title>Speech to Insights | Search</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Semantic search across meeting transcripts — ask natural language questions and get relevant snippets." />
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Core styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
+  <!-- Accessibility skip link -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>Search</h2>
         <p>Find insights instantly.</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html" class="active">Search</a>
-      <a href="sessions.html">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html" class="active" aria-current="page">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
   <!-- MAIN CONSOLE AREA -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
     <div class="main-inner">
 
       <!-- HEADER -->
       <header class="page-header">
-        <h1 class="page-title">Semantic Search</h1>
-        <p class="page-subtitle">
-          Ask natural language questions to search across all your meetings and transcripts.
-        </p>
+        <h1 id="page-title" class="page-title">Semantic Search</h1>
+        <p class="page-subtitle">Ask natural-language questions to search across your meetings and transcripts.</p>
       </header>
 
       <!-- SEARCH FORM -->
-      <section class="card">
-        <form id="search-form">
+      <section class="card" aria-labelledby="search-form-heading">
+        <h2 id="search-form-heading" class="visually-hidden">Search form</h2>
+
+        <form id="search-form" name="search-form" novalidate>
           <div class="field">
-            <label for="query">Search query</label>
+            <label for="search-input">Search query</label>
             <input
               type="text"
-              id="query"
+              id="search-input"
               name="query"
               placeholder="What did we decide about pricing?"
               required
-            >
+              autocomplete="off"
+              aria-required="true"
+            />
           </div>
 
-          <div class="filters row">
+          <div class="filters row" role="group" aria-label="Search filters">
             <div class="field">
               <label for="speaker-filter">Speaker</label>
               <input
@@ -76,17 +82,18 @@
                 id="speaker-filter"
                 name="speaker"
                 placeholder="(optional)"
-              >
+                aria-label="Filter by speaker"
+              />
             </div>
 
             <div class="field">
               <label for="date-from">From</label>
-              <input type="date" id="date-from" name="dateFrom">
+              <input type="date" id="date-from" name="dateFrom" aria-label="Date from" />
             </div>
 
             <div class="field">
               <label for="date-to">To</label>
-              <input type="date" id="date-to" name="dateTo">
+              <input type="date" id="date-to" name="dateTo" aria-label="Date to" />
             </div>
           </div>
 
@@ -97,10 +104,10 @@
       </section>
 
       <!-- SEARCH RESULTS -->
-      <section class="card">
-        <h2>Results</h2>
-        <div id="search-results" class="results-list">
-          <!-- Filled dynamically by search.js -->
+      <section class="card" aria-labelledby="results-heading">
+        <h2 id="results-heading">Results</h2>
+        <div id="search-results" class="results-list" role="region" aria-live="polite" aria-atomic="true">
+          <!-- Filled dynamically by /js/search.js or by the fallback below -->
         </div>
       </section>
 
@@ -108,16 +115,164 @@
   </main>
 
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
   <!-- Toast Notification -->
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- JS paths fixed -->
-  <script src="js/main.js"></script>
-  <script src="js/search.js"></script>
+  <!-- Scripts (deferred so DOM is available). Order: toast, main, search -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
+  <script defer src="/js/search.js"></script>
 
+  <!-- Defensive inline script: ensures theme, toast, and search form work if external scripts are missing -->
+  <script>
+    (function () {
+      function safeInit() {
+        // showToast fallback
+        if (typeof window.showToast !== 'function') {
+          window.showToast = function (message, timeout) {
+            try {
+              var toast = document.getElementById('toast');
+              if (!toast) { alert(message); return; }
+              toast.textContent = message;
+              toast.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
+            } catch (e) {
+              console.warn('showToast fallback failed', e);
+              alert(message);
+            }
+          };
+        }
+
+        // Theme toggle fallback + restore persisted preference
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeLink = document.getElementById('theme-link');
+        if (themeToggle && themeLink) {
+          if (!themeToggle.__fallbackAttached) {
+            themeToggle.addEventListener('click', function () {
+              try {
+                var href = themeLink.getAttribute('href') || '/css/theme-light.css';
+                var isDark = href.indexOf('dark') !== -1;
+                var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+                themeLink.setAttribute('href', next);
+                themeToggle.setAttribute('aria-pressed', String(!isDark));
+                try { localStorage.setItem('sti-theme', next); } catch (e) {}
+              } catch (e) {
+                console.warn('Theme toggle fallback error', e);
+              }
+            }, { passive: true });
+            themeToggle.__fallbackAttached = true;
+          }
+
+          try {
+            var stored = localStorage.getItem('sti-theme');
+            if (stored) themeLink.setAttribute('href', stored);
+          } catch (e) {}
+        }
+
+        // Search form handler: prefer window.performSearch (or sti.search.perform) if provided by /js/search.js
+        var form = document.getElementById('search-form');
+        var results = document.getElementById('search-results');
+
+        function renderPlaceholderResults(query) {
+          if (!results) return;
+          results.innerHTML = '';
+          var info = document.createElement('div');
+          info.className = 'muted';
+          info.textContent = 'No backend search available. Showing placeholder results for: "' + query + '".';
+          results.appendChild(info);
+
+          var list = document.createElement('ul');
+          list.className = 'list subtle';
+          var r1 = document.createElement('li');
+          r1.textContent = 'Sample result — "Decision: adopt pricing model A" (session: roadmap-2025-10-01)';
+          var r2 = document.createElement('li');
+          r2.textContent = 'Sample result — "Action: John to follow up on vendor quotes" (session: sprint-planning-2025-09-15)';
+          list.appendChild(r1);
+          list.appendChild(r2);
+          results.appendChild(list);
+        }
+
+        if (form && !form.__handled) {
+          form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var q = (document.getElementById('search-input') || {}).value || '';
+            var speaker = (document.getElementById('speaker-filter') || {}).value || '';
+            var from = (document.getElementById('date-from') || {}).value || '';
+            var to = (document.getElementById('date-to') || {}).value || '';
+
+            if (!q.trim()) {
+              window.showToast('Please enter a search query.', 2200);
+              return;
+            }
+
+            // Try common exported names from search.js
+            var impl = window.performSearch || (window.sti && sti.search && sti.search.perform) || (window.perform && window.perform.search);
+
+            if (typeof impl === 'function') {
+              try {
+                var out = impl(q, { speaker: speaker, dateFrom: from, dateTo: to });
+                // If implementation returns a promise, let it handle rendering; otherwise render if array returned
+                if (out && typeof out.then === 'function') {
+                  out.catch(function (err) {
+                    console.error('search implementation error', err);
+                    window.showToast('Search failed', 2000);
+                    renderPlaceholderResults(q);
+                  });
+                } else if (out && Array.isArray(out)) {
+                  // Best-effort rendering of simple arrays
+                  results.innerHTML = '';
+                  var list = document.createElement('ul'); list.className = 'list subtle';
+                  out.forEach(function (it) {
+                    var li = document.createElement('li');
+                    li.textContent = typeof it === 'string' ? it : (it.title || JSON.stringify(it));
+                    list.appendChild(li);
+                  });
+                  results.appendChild(list);
+                } else {
+                  // implementation provided but didn't return usable content -> fallback
+                  renderPlaceholderResults(q);
+                }
+              } catch (err) {
+                console.error('performSearch threw', err);
+                window.showToast('Search failed', 2000);
+                renderPlaceholderResults(q);
+              }
+            } else {
+              renderPlaceholderResults(q);
+              window.showToast('Displayed placeholder results (demo)', 1600);
+            }
+          });
+          form.__handled = true;
+        }
+
+        // Initial hint if results are empty
+        if (results && results.children.length === 0) {
+          var hint = document.createElement('p');
+          hint.className = 'muted';
+          hint.textContent = 'Enter a query above and press Search. If you see placeholder results, the demo search is active.';
+          results.appendChild(hint);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeInit);
+      } else {
+        safeInit();
+      }
+    })();
+  </script>
+
+  <noscript>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled in your browser. Search requires JavaScript to run.
+    </div>
+  </noscript>
 </body>
 </html>

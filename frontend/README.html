@@ -1,153 +1,151 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <title>Speech to Insights | Project README</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Documentation for the Speech to Insights MSML 650 term project.">
+  <meta name="author" content="Karthik (Surya Vamsi Vakada)">
+  <meta name="theme-color" content="#ffffff">
 
-  <!-- Base styles (FIXED PATHS) -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/animations.css">
-  <link rel="stylesheet" href="css/app.css">
-
-  <!-- Theme -->
-  <link id="theme-link" rel="stylesheet" href="css/theme-light.css">
+  <!-- Base styles (absolute paths from site root) -->
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <link rel="stylesheet" href="/css/app.css">
 </head>
 
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="brand-mark">STI</div>
+  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+    <div class="brand" aria-hidden="false">
+      <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
         <h2>README</h2>
-        <p>Documentation</p>
+        <p class="muted">Documentation</p>
       </div>
     </div>
 
-    <nav class="vnav">
-      <a href="index.html">Overview</a>
-      <a href="upload.html">Upload</a>
-      <a href="search.html">Search</a>
-      <a href="sessions.html">Sessions</a>
-      <a href="analytics.html">Analytics</a>
-      <a href="profile.html">Profile</a>
-      <a href="admin.html">Admin</a>
-      <a href="help.html">Help</a>
-      <a href="about.html">About</a>
-      <a href="contact.html">Contact</a>
-      <a href="README.html" class="active">README</a>
-      <a href="credits.html">Credits</a>
+    <nav class="vnav" aria-label="Site links">
+      <a href="/index.html">Overview</a>
+      <a href="/upload.html">Upload</a>
+      <a href="/search.html">Search</a>
+      <a href="/sessions.html">Sessions</a>
+      <a href="/analytics.html">Analytics</a>
+      <a href="/profile.html">Profile</a>
+      <a href="/admin.html">Admin</a>
+      <a href="/help.html">Help</a>
+      <a href="/about.html">About</a>
+      <a href="/contact.html">Contact</a>
+      <a href="/README.html" class="active" aria-current="page">README</a>
+      <a href="/credits.html">Credits</a>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width">Toggle Theme</button>
+    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+      Toggle Theme
+    </button>
   </aside>
 
-
   <!-- MAIN CONTENT -->
-  <main class="console page-enter">
+  <main id="main-content" class="console page-enter" role="main" aria-labelledby="readme-title">
     <div class="main-inner">
 
       <header class="page-header">
-        <h1 class="page-title">Speech to Insights – Project README</h1>
-        <p class="page-subtitle">
+        <h1 id="readme-title" class="page-title">Speech to Insights – Project README</h1>
+        <p class="page-subtitle muted">
           Documentation for the MSML 650 Machine Learning Systems Term Project.
         </p>
       </header>
 
-      <!-- INTRODUCTION -->
-      <section class="card">
-        <h2>📌 Introduction</h2>
+      <!-- INTRO -->
+      <section class="card" aria-labelledby="intro-heading">
+        <h2 id="intro-heading">Introduction</h2>
         <p>
-          <strong>Speech to Insights</strong> is a frontend-driven demonstration of a real-world ML system 
-          that transforms meeting audio or transcripts into structured insights.
+          <strong>Speech to Insights</strong> is a frontend-driven demonstration of how a meeting-analysis
+          ML system works. It converts audio or transcripts into searchable insights.
         </p>
         <p>
-          The system allows users to upload audio/text files, perform semantic search across transcripts,
-          browse past sessions, and visualize analytics such as topic frequency, speaker participation,
-          and keyword trends.
+          Users can upload recordings, perform semantic search, browse sessions,
+          and view analytics covering topic trends, speaker activity, and keyword patterns.
         </p>
         <p>
-          This project focuses on clean system design, user experience, and mock ML pipeline simulation
-          suitable for an academic environment.
+          The system is intentionally simulation-first for academic purposes.
         </p>
       </section>
 
       <!-- GOALS -->
-      <section class="card">
-        <h2>🎯 Project Goals</h2>
+      <section class="card" aria-labelledby="goals-heading">
+        <h2 id="goals-heading">Project Goals</h2>
         <ul class="list subtle">
           <li>Create an intuitive UI for uploading and processing meeting data</li>
-          <li>Provide semantic search functionality using natural language queries</li>
-          <li>Present organized transcripts with extracted highlights</li>
-          <li>Visualize conversation data with charts and word clouds</li>
-          <li>Demonstrate ML system design concepts in a simplified frontend</li>
+          <li>Provide semantic search functionality using natural-language queries</li>
+          <li>Present structured transcripts with extracted highlights</li>
+          <li>Visualize conversation data (topics, speakers, keywords)</li>
+          <li>Demonstrate ML system design concepts through a simulated pipeline</li>
         </ul>
       </section>
 
       <!-- ARCHITECTURE -->
-      <section class="card">
-        <h2>🏗 System Architecture (Frontend Simulation)</h2>
-        <p>This project includes:</p>
+      <section class="card" aria-labelledby="arch-heading">
+        <h2 id="arch-heading">System Architecture (Frontend Simulation)</h2>
+        <p>This project contains the following frontend modules (simulation-oriented):</p>
 
         <ul class="list subtle">
-          <li><strong>Upload Module</strong> – Accepts audio & text, simulates processing</li>
-          <li><strong>Semantic Search Engine</strong> – Embedding-style similarity (mocked)</li>
-          <li><strong>Session Explorer</strong> – Views transcripts & highlights</li>
-          <li><strong>Analytics Dashboard</strong> – Topic frequency, participation, word cloud</li>
-          <li><strong>Profile Page</strong> – User preferences stored locally</li>
-          <li><strong>Admin Panel</strong> – Queue status + demo data controls</li>
+          <li><strong>Upload Module</strong> – Audio/text input & simulated preprocessing</li>
+          <li><strong>Semantic Search</strong> – Embedding-style similarity (mocked)</li>
+          <li><strong>Session Explorer</strong> – Transcripts, highlights, summaries</li>
+          <li><strong>Analytics Dashboard</strong> – Topic charts, speaker stats, word cloud</li>
+          <li><strong>Profile</strong> – Local user preferences</li>
+          <li><strong>Admin Panel</strong> – Demo queue + data seeding</li>
         </ul>
 
         <p>
-          The system is designed to follow the high-level structure of ML production systems
-          taught in MSML 650.
+          The UI mirrors production ML systems covered in MSML 650, with simplified logic so it can run locally.
         </p>
       </section>
 
       <!-- FEATURES -->
-      <section class="card">
-        <h2>✨ Key Features</h2>
+      <section class="card" aria-labelledby="features-heading">
+        <h2 id="features-heading">Key Features</h2>
         <ul class="list subtle">
-          <li>Beautiful, consistent UI with reusable components</li>
-          <li>Light/Dark mode with theme toggle</li>
-          <li>Session list with filters and sortable data (simulated)</li>
+          <li>Consistent design system with reusable components</li>
+          <li>Light/Dark theme toggle with persistence</li>
           <li>Semantic search with question-style queries</li>
-          <li>Interactive analytics charts (placeholder + JS hooks)</li>
-          <li>Local session caching for demonstration</li>
+          <li>Interactive analytics (charts + word cloud placeholders)</li>
+          <li>Local session caching for demo mode</li>
+          <li>Session explorer with highlights and summaries</li>
         </ul>
       </section>
 
       <!-- TECHNOLOGIES -->
-      <section class="card">
-        <h2>🧰 Technologies Used</h2>
+      <section class="card" aria-labelledby="tech-heading">
+        <h2 id="tech-heading">Technologies Used</h2>
         <ul class="list subtle">
-          <li><strong>HTML5</strong> – UI structure</li>
-          <li><strong>CSS (base, components, animations, app)</strong> – Custom design system</li>
-          <li><strong>JavaScript</strong> – Page logic + simulated ML behavior</li>
-          <li><strong>LocalStorage</strong> – Persistence for demo mode</li>
+          <li><strong>HTML5</strong> – UI and structure</li>
+          <li><strong>CSS</strong> – Base, components, animations, app</li>
+          <li><strong>JavaScript</strong> – Page logic and ML simulation</li>
+          <li><strong>LocalStorage</strong> – Persistent demo settings</li>
         </ul>
       </section>
 
-      <!-- HOW TO USE -->
-      <section class="card">
-        <h2>🚀 How to Run the Frontend</h2>
+      <!-- HOW TO RUN -->
+      <section class="card" aria-labelledby="run-heading">
+        <h2 id="run-heading">How to Run the Frontend</h2>
         <ul class="list subtle">
-          <li>Download or clone the project folder</li>
-          <li>Open any page (e.g., <strong>index.html</strong>) in a browser</li>
-          <li>No backend is required</li>
-          <li>All interactions run client-side with simulated ML outputs</li>
+          <li>Clone or download the project folder</li>
+          <li>Open <strong>index.html</strong> in any modern browser (file:// or via a simple local server)</li>
+          <li>No backend is strictly required for demo mode — behavior is client-side</li>
+          <li>To connect real services, wire the endpoints used by the JS modules (presign, upload, sessions, search)</li>
         </ul>
       </section>
 
       <!-- FILE STRUCTURE -->
-      <section class="card">
-        <h2>📁 Project File Structure</h2>
+      <section class="card" aria-labelledby="files-heading">
+        <h2 id="files-heading">Project File Structure</h2>
 
-        <p>This project follows a flat, simple structure:</p>
-        <pre class="code-block">
+        <pre class="code-block" aria-label="Project file listing">
 index.html
 upload.html
 search.html
@@ -162,47 +160,94 @@ contact.html
 README.html
 credits.html
 
-base.css
-components.css
-animations.css
-app.css
-style.css
-theme-light.css
-theme-dark.css
+css/
+  base.css
+  components.css
+  animations.css
+  app.css
+  theme-light.css
+  theme-dark.css
 
-main.js
-upload.js
-search.js
-sessions.js
-analytics.js
-profile.js
-admin.js
+js/
+  main.js
+  toast.js
+  upload.js
+  search.js
+  sessions.js
+  analytics.js
+  profile.js
+  admin.js
         </pre>
       </section>
 
       <!-- NOTE -->
-      <section class="card">
-        <h2>📄 Academic Note</h2>
+      <section class="card" aria-labelledby="note-heading">
+        <h2 id="note-heading">Academic Note</h2>
         <p>
-          This project is intended for course demonstration only.<br>
-          No real machine learning models are executed in this frontend version.<br>
-          All outputs are simulated to represent an ML pipeline workflow.
+          This is a course demonstration. No live ML models run in this static demo by default —
+          summaries, analytics, and search results are simulated unless you configure a backend.
         </p>
       </section>
 
     </div>
   </main>
 
-
   <!-- FOOTER -->
-  <footer>
-    <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+  <footer role="contentinfo" class="site-footer">
+    <div class="container">
+      <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
+    </div>
   </footer>
 
-  <div id="toast" aria-live="polite"></div>
+  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- JS PATH FIXED -->
-  <script src="js/main.js"></script>
+  <!-- Primary JS -->
+  <script defer src="/js/toast.js"></script>
+  <script defer src="/js/main.js"></script>
 
+  <!-- Lightweight fallback script (resilient defaults) -->
+  <script>
+    (function () {
+      function ensureToast() {
+        if (typeof window.showToast === 'function') return;
+        window.showToast = function (msg, timeout) {
+          var el = document.getElementById('toast');
+          if (!el) { try { console.log('TOAST:', msg); } catch (e) {} return; }
+          el.textContent = String(msg || '');
+          el.classList.add('visible');
+          setTimeout(function () { el.classList.remove('visible'); }, typeof timeout === 'number' ? timeout : 3000);
+        };
+      }
+
+      function safeInit() {
+        ensureToast();
+
+        // Theme toggle fallback and restore
+        var toggle = document.getElementById('theme-toggle');
+        var theme = document.getElementById('theme-link');
+        if (toggle && theme && !toggle.__fallbackAttached) {
+          toggle.addEventListener('click', function () {
+            try {
+              var href = theme.getAttribute('href') || '/css/theme-light.css';
+              var isDark = href.indexOf('dark') !== -1;
+              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
+              theme.setAttribute('href', next);
+              toggle.setAttribute('aria-pressed', String(!isDark));
+              try { localStorage.setItem('sti-theme', next); } catch (e) {}
+            } catch (e) { console.warn('Theme toggle error', e); }
+          }, { passive: true });
+
+          try {
+            var saved = localStorage.getItem('sti-theme');
+            if (saved) theme.setAttribute('href', saved);
+          } catch (e) {}
+          toggle.__fallbackAttached = true;
+        }
+      }
+
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeInit);
+      else safeInit();
+    })();
+  </script>
 </body>
 </html>

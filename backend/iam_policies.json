@@ -6,16 +6,23 @@
         "Sid": "S3Access",
         "Effect": "Allow",
         "Action": [
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::${INPUT_BUCKET_NAME}"
+        ]
+      },
+      {
+        "Sid": "S3ObjectAccess",
+        "Effect": "Allow",
+        "Action": [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:ListBucket",
           "s3:DeleteObject"
         ],
         "Resource": [
-          "arn:aws:s3:::YOUR_INPUT_BUCKET",
-          "arn:aws:s3:::YOUR_INPUT_BUCKET/*",
-          "arn:aws:s3:::YOUR_OUTPUT_BUCKET",
-          "arn:aws:s3:::YOUR_OUTPUT_BUCKET/*"
+          "arn:aws:s3:::${INPUT_BUCKET_NAME}/*",
+          "arn:aws:s3:::${OUTPUT_BUCKET_NAME}/*"
         ]
       },
       {
@@ -27,30 +34,63 @@
           "logs:PutLogEvents",
           "logs:DescribeLogStreams"
         ],
-        "Resource": "arn:aws:logs:*:*:*"
+        "Resource": [
+          "arn:aws:logs:${AWS_REGION}:${AWS_ACCOUNT_ID}:log-group:/aws/lambda/*",
+          "arn:aws:logs:${AWS_REGION}:${AWS_ACCOUNT_ID}:log-group:/aws/sagemaker/*"
+        ]
       },
       {
-        "Sid": "SageMaker",
+        "Sid": "SageMakerLimited",
         "Effect": "Allow",
         "Action": [
           "sagemaker:CreateTransformJob",
           "sagemaker:DescribeTransformJob",
+          "sagemaker:CreateModel",
+          "sagemaker:DescribeModel",
           "sagemaker:InvokeEndpoint",
-          "sagemaker:CreateEndpoint",
-          "sagemaker:CreateEndpointConfig",
           "sagemaker:DescribeEndpoint",
-          "sagemaker:DescribeEndpointConfig"
+          "sagemaker:CreateEndpointConfig",
+          "sagemaker:CreateEndpoint"
         ],
-        "Resource": "*"
+        "Resource": [
+          "arn:aws:sagemaker:${AWS_REGION}:${AWS_ACCOUNT_ID}:transform-job/*",
+          "arn:aws:sagemaker:${AWS_REGION}:${AWS_ACCOUNT_ID}:model/*",
+          "arn:aws:sagemaker:${AWS_REGION}:${AWS_ACCOUNT_ID}:endpoint/*",
+          "arn:aws:sagemaker:${AWS_REGION}:${AWS_ACCOUNT_ID}:endpoint-config/*"
+        ]
       },
       {
         "Sid": "StepFunctionsCallback",
         "Effect": "Allow",
         "Action": [
           "states:SendTaskSuccess",
-          "states:SendTaskFailure"
+          "states:SendTaskFailure",
+          "states:StartExecution",
+          "states:DescribeExecution"
         ],
-        "Resource": "*"
+        "Resource": [
+          "${STEP_FUNCTIONS_ARN}",
+          "arn:aws:states:${AWS_REGION}:${AWS_ACCOUNT_ID}:stateMachine:*"
+        ]
+      },
+      {
+        "Sid": "OptionalKMSForS3",
+        "Effect": "Allow",
+        "Action": [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:GenerateDataKeyWithoutPlaintext",
+          "kms:DescribeKey"
+        ],
+        "Resource": [
+          "${KMS_KEY_ARN}"
+        ],
+        "Condition": {
+          "StringNotEqualsIfExists": {
+            "kms:CallerAccount": ""
+          }
+        }
       }
     ]
   },
@@ -67,21 +107,34 @@
           "s3:ListBucket"
         ],
         "Resource": [
-          "arn:aws:s3:::YOUR_INPUT_BUCKET",
-          "arn:aws:s3:::YOUR_INPUT_BUCKET/*",
-          "arn:aws:s3:::YOUR_OUTPUT_BUCKET",
-          "arn:aws:s3:::YOUR_OUTPUT_BUCKET/*"
+          "arn:aws:s3:::${INPUT_BUCKET_NAME}",
+          "arn:aws:s3:::${INPUT_BUCKET_NAME}/*",
+          "arn:aws:s3:::${OUTPUT_BUCKET_NAME}",
+          "arn:aws:s3:::${OUTPUT_BUCKET_NAME}/*"
         ]
       },
       {
-        "Sid": "Logs",
+        "Sid": "LogsForSageMaker",
         "Effect": "Allow",
         "Action": [
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ],
-        "Resource": "arn:aws:logs:*:*:*"
+        "Resource": [
+          "arn:aws:logs:${AWS_REGION}:${AWS_ACCOUNT_ID}:log-group:/aws/sagemaker/*"
+        ]
+      },
+      {
+        "Sid": "SageMakerRuntimeInvoke",
+        "Effect": "Allow",
+        "Action": [
+          "sagemaker:InvokeEndpoint",
+          "sagemaker:InvokeEndpointAsync"
+        ],
+        "Resource": [
+          "arn:aws:sagemaker:${AWS_REGION}:${AWS_ACCOUNT_ID}:endpoint/*"
+        ]
       }
     ]
   },
@@ -90,14 +143,31 @@
     "Version": "2012-10-17",
     "Statement": [
       {
-        "Sid": "AllowS3ObjectUploadOnly",
+        "Sid": "AllowS3ObjectUploadOnlyToInputsPrefix",
         "Effect": "Allow",
         "Action": [
           "s3:PutObject"
         ],
         "Resource": [
-          "arn:aws:s3:::YOUR_INPUT_BUCKET/*"
+          "arn:aws:s3:::${INPUT_BUCKET_NAME}/${INPUT_PREFIX}/*"
         ]
+      },
+      {
+        "Sid": "OptionalPresignAllowList",
+        "Effect": "Allow",
+        "Action": [
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::${INPUT_BUCKET_NAME}"
+        ],
+        "Condition": {
+          "StringLike": {
+            "s3:prefix": [
+              "${INPUT_PREFIX}/*"
+            ]
+          }
+        }
       }
     ]
   }

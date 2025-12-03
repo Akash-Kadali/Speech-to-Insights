@@ -1,14 +1,27 @@
 // admin.js — admin page behaviors (seed/clear/demo queue)
+// Final corrected, defensive, configurable endpoint, exposes stable API on window
 (function () {
   'use strict';
 
-  // Expose a stable API on window so defensive inline scripts can detect
-  // whether the page behaviors are available (the HTML fallbacks check these).
-  // Avoid clobbering existing implementations.
+  // Stable namespace for reuse/debugging
   var api = window.stiAdmin || (window.stiAdmin = {});
+
+  // Configurable backend endpoint (override from HTML or other script if needed)
+  var QUEUE_ENDPOINT = (window.STI && window.STI.ADMIN_QUEUE_ENDPOINT) || window.STI_ADMIN_QUEUE_ENDPOINT || '/admin/queue';
+  var FETCH_TIMEOUT_MS = (window.STI && window.STI.ADMIN_FETCH_TIMEOUT_MS) || 2500;
+
+  // Normalize endpoint (allow array or single string)
+  if (Array.isArray(QUEUE_ENDPOINT)) QUEUE_ENDPOINT = QUEUE_ENDPOINT[0];
 
   function getQueueElement() {
     return document.getElementById('queue-list');
+  }
+
+  function _makeMutedItem(text) {
+    var li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = text;
+    return li;
   }
 
   function renderQueue(list) {
@@ -17,24 +30,26 @@
     ul.innerHTML = '';
 
     if (!Array.isArray(list) || list.length === 0) {
-      var li = document.createElement('li');
-      li.className = 'muted';
-      li.textContent = 'Queue is empty';
-      ul.appendChild(li);
-      // update aria-live for screenreaders by toggling an attribute
+      ul.appendChild(_makeMutedItem('Queue is empty'));
+      // update aria-live for screenreaders by toggling a lightweight attribute
       ul.setAttribute('data-last-render', 'empty');
       return;
     }
 
     list.forEach(function (it) {
       var li = document.createElement('li');
-      li.textContent = it;
+      // protect against non-string items
+      try {
+        li.textContent = (typeof it === 'string') ? it : (it.display || it.name || JSON.stringify(it));
+      } catch (e) {
+        li.textContent = String(it);
+      }
       ul.appendChild(li);
     });
     ul.setAttribute('data-last-render', 'populated');
   }
 
-  // Public functions (attached for fallback checks)
+  // Public demo utilities
   function seedDemoData() {
     var sample = [
       'upload_2025-11-30_12:02.wav — processing',
@@ -52,16 +67,24 @@
     else console.info('Demo data cleared');
   }
 
-  // Attach to both window and stiAdmin so other scripts can reuse
+  // Expose fallback-safe global functions if not already defined
   if (typeof window.seedDemoData !== 'function') window.seedDemoData = seedDemoData;
   if (typeof window.clearDemoData !== 'function') window.clearDemoData = clearDemoData;
+
+  // Add to api namespace
   api.seedDemoData = seedDemoData;
   api.clearDemoData = clearDemoData;
   api.renderQueue = renderQueue;
 
-  // Helper to fetch JSON with timeout
+  // Helper: parse various JSON/text responses robustly
+  function _tryParseJson(text) {
+    try { return JSON.parse(text); }
+    catch (e) { return null; }
+  }
+
+  // Helper: fetch JSON with a timeout; returns parsed JSON or throws
   async function fetchJsonWithTimeout(url, timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 3000;
+    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : FETCH_TIMEOUT_MS;
     var controller = new AbortController();
     var id = setTimeout(function () { controller.abort(); }, timeoutMs);
     try {
@@ -69,8 +92,15 @@
       clearTimeout(id);
       if (!res.ok) throw new Error('Network response not ok: ' + res.status);
       var text = await res.text();
-      // attempt to parse JSON safely
-      try { return JSON.parse(text); } catch (e) { throw new Error('Invalid JSON'); }
+      // try multiple parse strategies
+      var parsed = _tryParseJson(text);
+      if (parsed !== null) return parsed;
+      // plain text that might represent a JSON line — try first line
+      var first = (text || '').split(/\r?\n/).find(Boolean);
+      parsed = _tryParseJson(first || '');
+      if (parsed !== null) return parsed;
+      // fallback: return raw text
+      return text;
     } finally {
       clearTimeout(id);
     }
@@ -79,29 +109,76 @@
   // Try to fetch real queue from backend; if it fails, leave demo/fallback in place
   async function tryPopulateQueueFromBackend() {
     try {
-      var data = await fetchJsonWithTimeout('/admin/queue', 2500);
-      if (data && Array.isArray(data.queue)) {
+      var data = await fetchJsonWithTimeout(QUEUE_ENDPOINT, FETCH_TIMEOUT_MS);
+      // Accept either array or object shapes: { queue: [...] } or { items: [...] } or plain array
+      if (!data) return false;
+      if (Array.isArray(data)) {
+        renderQueue(data);
+        return true;
+      }
+      if (Array.isArray(data.queue)) {
         renderQueue(data.queue);
         return true;
       }
+      if (Array.isArray(data.items)) {
+        renderQueue(data.items);
+        return true;
+      }
+      // If data is an object with top-level keys mapping to items, attempt to coerce
+      var keys = Object.keys(data || {});
+      for (var i = 0; i < keys.length; i++) {
+        var v = data[keys[i]];
+        if (Array.isArray(v)) {
+          renderQueue(v);
+          return true;
+        }
+      }
     } catch (e) {
-      // intentionally silent — backend optional for demo
-      // console.debug('admin queue fetch failed', e);
+      // silent — backend optional for demo; but surface minimal log
+      if (typeof console !== 'undefined' && console.debug) console.debug('admin queue fetch failed', e);
     }
     return false;
   }
 
+  // Public refresh function (exposed so UI buttons or tests can call it)
+  async function refreshQueue() {
+    var ul = getQueueElement();
+    if (!ul) {
+      if (typeof console !== 'undefined') console.warn('No queue element found');
+      return false;
+    }
+    // show a short loading placeholder
+    ul.innerHTML = '';
+    ul.appendChild(_makeMutedItem('Loading queue...'));
+    var ok = await tryPopulateQueueFromBackend();
+    if (!ok) {
+      // fallback to empty placeholder if backend not present
+      renderQueue([]);
+      if (typeof window.showToast === 'function') window.showToast('No backend queue available (demo)', 1400);
+    } else {
+      if (typeof window.showToast === 'function') window.showToast('Queue refreshed', 1200);
+    }
+    return ok;
+  }
+
+  api.refreshQueue = refreshQueue;
+
   function safeInit() {
     var seedBtn = document.getElementById('seed-demo-data');
     var clearBtn = document.getElementById('clear-demo-data');
+    var refreshBtn = document.getElementById('admin-refresh-queue');
 
     if (seedBtn && !seedBtn.__handled) {
-      seedBtn.addEventListener('click', seedDemoData);
+      seedBtn.addEventListener('click', function (ev) { ev.preventDefault(); seedDemoData(); }, { passive: true });
       seedBtn.__handled = true;
     }
     if (clearBtn && !clearBtn.__handled) {
-      clearBtn.addEventListener('click', clearDemoData);
+      clearBtn.addEventListener('click', function (ev) { ev.preventDefault(); clearDemoData(); }, { passive: true });
       clearBtn.__handled = true;
+    }
+    if (refreshBtn && !refreshBtn.__handled) {
+      refreshBtn.addEventListener('click', function (ev) { ev.preventDefault(); refreshQueue(); }, { passive: true });
+      refreshBtn.__handled = true;
     }
 
     // If page already has queue items (rendered server-side or earlier), do nothing.
@@ -121,4 +198,16 @@
   } else {
     safeInit();
   }
+
+  // Export API on window.stiAdmin (stable)
+  window.stiAdmin = window.stiAdmin || {};
+  window.stiAdmin.seedDemoData = window.stiAdmin.seedDemoData || seedDemoData;
+  window.stiAdmin.clearDemoData = window.stiAdmin.clearDemoData || clearDemoData;
+  window.stiAdmin.renderQueue = window.stiAdmin.renderQueue || renderQueue;
+  window.stiAdmin.refreshQueue = window.stiAdmin.refreshQueue || refreshQueue;
+  // also keep local reference
+  api.seedDemoData = seedDemoData;
+  api.clearDemoData = clearDemoData;
+  api.renderQueue = renderQueue;
+  api.refreshQueue = refreshQueue;
 })();
