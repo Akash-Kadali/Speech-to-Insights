@@ -15,12 +15,7 @@ Behavior:
     - load(path) -> np.ndarray
 - Deterministic: same input -> identical vector. Fallback ensures determinism even without external libs.
 - Vectors are numpy arrays dtype float32.
-
-Notes:
-- This module is intentionally defensive: it will not raise on missing optional dependencies
-  until you attempt to use that provider. Fallback always works.
 """
-
 from __future__ import annotations
 
 import os
@@ -31,7 +26,7 @@ from typing import List, Union, Optional, Any
 
 import numpy as np
 
-logger = logging.getLogger("embedding")
+logger = logging.getLogger("backend.embedding")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
 logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 
@@ -39,48 +34,55 @@ logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 _USE_ST_MODEL = False
 _USE_OPENAI = False
 
-# Placeholder variables; will be set when providers initialize
-_st_model = None
+# Placeholder provider references
+_st_model = None  # sentence-transformers model instance if available
+
+# Default fallback embedding dimension (can be adjusted by provider at runtime)
 EMBEDDING_DIM: int = int(os.getenv("FALLBACK_EMBEDDING_DIM", "512"))
 
-# Attempt to import sentence_transformers
+# -------------------------
+# Try sentence-transformers provider (optional)
+# -------------------------
 try:
     from sentence_transformers import SentenceTransformer  # type: ignore
 
     try:
-        # choose a compact model that is likely available or will be downloaded on first run
         _ST_MODEL_NAME = os.getenv("ST_MODEL_NAME", "all-MiniLM-L6-v2")
         _st_model = SentenceTransformer(_ST_MODEL_NAME)
         _USE_ST_MODEL = True
-        EMBEDDING_DIM = _st_model.get_sentence_embedding_dimension()
-        logger.info("Using sentence-transformers model %s (dim=%d)", _ST_MODEL_NAME, EMBEDDING_DIM)
+        EMBEDDING_DIM = int(_st_model.get_sentence_embedding_dimension())
+        logger.info("sentence-transformers available: model=%s dim=%d", _ST_MODEL_NAME, EMBEDDING_DIM)
     except Exception:
-        logger.exception("Failed to initialize sentence-transformers model; falling back")
+        logger.exception("Failed to initialize sentence-transformers model; disabling ST provider")
+        _st_model = None
         _USE_ST_MODEL = False
-        _st_model = None  # type: ignore
 except Exception:
-    _st_model = None  # type: ignore
+    _st_model = None
     _USE_ST_MODEL = False
 
-# Attempt to import OpenAI client if available and api key present
+# -------------------------
+# Try OpenAI provider (optional)
+# -------------------------
 try:
     import openai  # type: ignore
 
     _openai_key = os.getenv("OPENAI_API_KEY")
     if _openai_key:
         openai.api_key = _openai_key
-        # We'll use OpenAI only if sentence-transformers not available (best-effort)
+        # We'll enable OpenAI provider as available (used if ST not present or when chosen).
         _USE_OPENAI = True
-        # OpenAI embedding dimension depends on model; set a default and adjust after first call.
-        EMBEDDING_DIM = int(os.getenv("OPENAI_EMBED_DIM", str(EMBEDDING_DIM or 1536)))
-        logger.info("OpenAI client available; embeddings can use OpenAI when selected")
+        # keep EMBEDDING_DIM conservative until first response sets it
+        try:
+            EMBEDDING_DIM = int(os.getenv("OPENAI_EMBED_DIM", str(EMBEDDING_DIM)))
+        except Exception:
+            pass
+        logger.info("OpenAI client available for embeddings (model env: %s)", os.getenv("OPENAI_EMBEDDING_MODEL"))
     else:
         _USE_OPENAI = False
 except Exception:
     _USE_OPENAI = False
 
-# If neither provider succeeded, EMBEDDING_DIM will remain set to fallback above.
-logger.debug("Embedding module initialized. USE_ST=%s USE_OPENAI=%s dim=%d", _USE_ST_MODEL, _USE_OPENAI, EMBEDDING_DIM)
+logger.debug("embedding providers: use_st=%s use_openai=%s dim=%d", _USE_ST_MODEL, _USE_OPENAI, EMBEDDING_DIM)
 
 
 # -------------------------
@@ -94,49 +96,44 @@ def embed(text: str) -> np.ndarray:
     if not isinstance(text, str):
         raise TypeError("text must be a string")
 
-    # Fast path: sentence-transformers
+    # sentence-transformers path (fast, local)
     if _USE_ST_MODEL and _st_model is not None:
         vec = _st_model.encode(text, convert_to_numpy=True)
-        vec = np.asarray(vec, dtype=np.float32)
-        # Ensure shape and dimension
-        if vec.ndim == 1:
-            if vec.size != EMBEDDING_DIM:
-                # adjust global dim to match model
-                global EMBEDDING_DIM
-                EMBEDDING_DIM = int(vec.size)
-            return vec
-        # unexpected shape: flatten
-        vec = vec.reshape(-1).astype(np.float32)
+        arr = np.asarray(vec, dtype=np.float32)
+        if arr.ndim != 1:
+            arr = arr.reshape(-1)
+        # update global dim if it differs
         global EMBEDDING_DIM
-        EMBEDDING_DIM = int(vec.size)
-        return vec
+        if arr.size != EMBEDDING_DIM:
+            EMBEDDING_DIM = int(arr.size)
+            logger.debug("Adjusted EMBEDDING_DIM to %d from sentence-transformers", EMBEDDING_DIM)
+        return arr
 
-    # OpenAI path (best-effort). We call synchronously and update EMBEDDING_DIM if possible.
+    # OpenAI path (best-effort). Update EMBEDDING_DIM from response.
     if _USE_OPENAI:
         try:
             model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
             resp = openai.Embedding.create(input=[text], model=model)
             emb = resp["data"][0]["embedding"]
-            vec = np.asarray(emb, dtype=np.float32)
+            arr = np.asarray(emb, dtype=np.float32)
             global EMBEDDING_DIM
-            EMBEDDING_DIM = int(vec.size)
-            return vec
+            EMBEDDING_DIM = int(arr.size)
+            return arr
         except Exception:
-            logger.exception("OpenAI embedding call failed; falling back to local embedding")
+            logger.exception("OpenAI embedding call failed; falling back to local deterministic embedding")
 
-    # Fallback deterministic hashing-based embedding
+    # Deterministic local fallback
     return _fallback_embed(text)
 
 
-def embed_batch(texts: List[str]) -> List[np.ndarray]:
+def embed_batch(texts: List[str]) -> Union[List[np.ndarray], np.ndarray]:
     """
-    Embed a batch of texts. Returns a list of 1-D numpy arrays (dtype float32).
-    Implementations may return a numpy array (n x dim) but tests accept list or array.
+    Embed a batch of texts. Returns either a list of 1-D numpy float32 arrays or a 2-D numpy array.
     """
     if texts is None:
         raise TypeError("texts must be an iterable of strings")
+    # coerce to list for multiple passes
     if not isinstance(texts, (list, tuple)):
-        # allow other iterables by coercing to list
         texts = list(texts)
 
     # sentence-transformers batch path
@@ -145,12 +142,12 @@ def embed_batch(texts: List[str]) -> List[np.ndarray]:
         arr = np.asarray(vecs, dtype=np.float32)
         if arr.ndim == 1:
             arr = arr.reshape(1, -1)
-        # ensure global dim matches
         global EMBEDDING_DIM
         EMBEDDING_DIM = int(arr.shape[1])
+        # return list to be consistent with single-item embed
         return [arr[i] for i in range(arr.shape[0])]
 
-    # OpenAI batch path (creates multiple inputs in one call)
+    # OpenAI batch path (best-effort)
     if _USE_OPENAI:
         try:
             model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
@@ -163,7 +160,7 @@ def embed_batch(texts: List[str]) -> List[np.ndarray]:
         except Exception:
             logger.exception("OpenAI batch embedding failed; falling back to local embedding")
 
-    # fallback: use local for each item
+    # fallback: compute one-by-one deterministically
     return [_fallback_embed(t) for t in texts]
 
 
@@ -174,48 +171,36 @@ def _fallback_embed(text: str) -> np.ndarray:
     """
     Deterministic, purely local embedding generator based on iterative SHA-256 hashing.
     Produces EMBEDDING_DIM floats in [-0.5, +0.5], then returns the vector normalized to unit length.
-    Same input -> identical vector. Different inputs -> usually low cosine similarity.
-
-    Implementation detail:
-      For each dimension i, compute sha256(f"{text}\x00{i}") and extract 4 bytes -> uint32 -> float in [0,1).
-      Map to [-0.5, 0.5] and finally L2-normalize.
     """
     dim = int(EMBEDDING_DIM)
     buf = np.empty(dim, dtype=np.float32)
-    # guard empty string but allow it
     text_bytes = (text or "").encode("utf-8")
     for i in range(dim):
         h = hashlib.sha256()
-        # include dimension index and a small separator for clarity
         h.update(text_bytes)
         h.update(b"\x00")
         h.update(str(i).encode("utf-8"))
         digest = h.digest()
-        # use first 4 bytes as uint32 in big-endian
+        # use first 4 bytes as uint32 big-endian
         v = int.from_bytes(digest[0:4], "big")
-        # scale to [0,1)
-        f = v / float(2 ** 32)
+        f = v / float(2 ** 32)  # in [0,1)
         buf[i] = float(f - 0.5)  # center around zero
-    # normalize (protect against zero vector)
     norm = np.linalg.norm(buf)
     if norm == 0.0:
-        # extremely unlikely, but handle gracefully
         return np.zeros(dim, dtype=np.float32)
     return (buf / norm).astype(np.float32)
 
 
 # -------------------------
-# Optional persistence utilities (used by tests if present)
+# Optional persistence utilities
 # -------------------------
 def persist(vec: Union[List[float], np.ndarray], meta_or_path: Union[str, dict], path: Optional[str] = None) -> None:
     """
     Persist a single embedding vector to disk.
-    Flexible signatures supported by tests:
-      persist(vec, meta_dict, path="/tmp/emb.npz")
-      or persist(vec, "/tmp/emb.npz")
-    Behavior:
-      - If meta_or_path is a string and path is None: treat meta_or_path as file path and save vector only (.npy)
-      - If meta_or_path is a dict and path provided: save vector (.npy) and metadata (.json) next to it.
+
+    Signatures:
+      persist(vec, "/tmp/emb.npz")
+      persist(vec, {"meta":...}, path="/tmp/emb.npz")
     """
     arr = np.asarray(vec, dtype=np.float32)
     if isinstance(meta_or_path, str) and path is None:
@@ -226,10 +211,10 @@ def persist(vec: Union[List[float], np.ndarray], meta_or_path: Union[str, dict],
 
     if path is None:
         raise TypeError("When providing metadata, supply 'path' argument for output file")
+
     out_path = path
     base = out_path.rsplit(".", 1)[0]
     np.save(base + ".npy", arr)
-    # write metadata (if dict)
     if isinstance(meta_or_path, dict):
         try:
             with open(base + "_meta.json", "w", encoding="utf-8") as fh:
@@ -240,10 +225,8 @@ def persist(vec: Union[List[float], np.ndarray], meta_or_path: Union[str, dict],
 
 def load(path: str) -> np.ndarray:
     """
-    Load a persisted embedding saved via persist. Accepts either:
-      - path pointing to .npy file
-      - path pointing to base name (with or without extension)
-    Returns numpy ndarray dtype float32.
+    Load a persisted embedding saved via persist.
+    Accepts a path with or without extension; loads <base>.npy.
     """
     base = path.rsplit(".", 1)[0]
     npy = base + ".npy"

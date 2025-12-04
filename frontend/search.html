@@ -2,55 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Speech to Insights | Search</title>
+  <title>Speech to Insights — Search</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Semantic search across meeting transcripts — ask natural language questions and get relevant snippets." />
-  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="author" content="Sri Akash Kadali" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (absolute paths from site root) -->
-  <link rel="stylesheet" href="/css/base.css" />
+  <!-- Preload critical assets -->
+  <link rel="preload" href="/css/base.css" as="style">
+  <link rel="preload" href="/css/app.css" as="style">
+
+  <!-- Core styles (base.css should contain design tokens) -->
+  <link id="theme-link" rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/components.css" />
   <link rel="stylesheet" href="/css/animations.css" />
   <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- OpenGraph / Twitter -->
+  <meta property="og:title" content="Speech to Insights — Search" />
+  <meta property="og:description" content="Ask natural-language questions to search across meetings and transcripts." />
+  <meta name="twitter:card" content="summary" />
 </head>
 <body>
-  <!-- Accessibility skip link -->
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+  <aside id="site-sidebar" class="sidebar" role="navigation" aria-label="Primary navigation">
     <div class="brand" aria-hidden="false">
       <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h2>Search</h2>
-        <p>Find insights instantly.</p>
+        <h2 class="brand-heading">Search</h2>
+        <p class="brand-sub muted">Find insights instantly</p>
       </div>
     </div>
 
-    <nav class="vnav" aria-label="Site links">
-      <a href="/index.html">Overview</a>
-      <a href="/upload.html">Upload</a>
-      <a href="/search.html" class="active" aria-current="page">Search</a>
-      <a href="/sessions.html">Sessions</a>
-      <a href="/analytics.html">Analytics</a>
-      <a href="/profile.html">Profile</a>
-      <a href="/admin.html">Admin</a>
-      <a href="/help.html">Help</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="primary-nav" aria-label="Toggle navigation">Menu</button>
+
+    <nav id="primary-nav" class="vnav" aria-label="Site links" role="navigation">
+      <ul>
+        <li><a href="/index.html">Overview</a></li>
+        <li><a href="/upload.html">Upload</a></li>
+        <li><a href="/search.html" class="active" aria-current="page">Search</a></li>
+        <li><a href="/sessions.html">Sessions</a></li>
+        <li><a href="/analytics.html">Analytics</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/credits.html">Credits</a></li>
+      </ul>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
-      Toggle Theme
-    </button>
+    <div class="sidebar-controls">
+      <button id="theme-toggle" class="btn btn-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">Toggle theme</button>
+
+      <div id="backend-status" class="backend-status" aria-live="polite" aria-atomic="true" title="Backend connection status">
+        <span class="status-dot" aria-hidden="true" data-state="unknown"></span>
+        <span class="status-label">Checking backend…</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- MAIN CONSOLE AREA -->
-  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
-    <div class="main-inner">
-
-      <!-- HEADER -->
+  <!-- MAIN -->
+  <main id="main-content" class="main page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner container">
       <header class="page-header">
         <h1 id="page-title" class="page-title">Semantic Search</h1>
         <p class="page-subtitle">Ask natural-language questions to search across your meetings and transcripts.</p>
@@ -60,30 +73,24 @@
       <section class="card" aria-labelledby="search-form-heading">
         <h2 id="search-form-heading" class="visually-hidden">Search form</h2>
 
-        <form id="search-form" name="search-form" novalidate>
+        <form id="search-form" name="search-form" novalidate autocomplete="off" aria-describedby="search-hint">
           <div class="field">
             <label for="search-input">Search query</label>
             <input
-              type="text"
+              type="search"
               id="search-input"
               name="query"
               placeholder="What did we decide about pricing?"
               required
-              autocomplete="off"
               aria-required="true"
+              autocomplete="off"
             />
           </div>
 
           <div class="filters row" role="group" aria-label="Search filters">
             <div class="field">
               <label for="speaker-filter">Speaker</label>
-              <input
-                type="text"
-                id="speaker-filter"
-                name="speaker"
-                placeholder="(optional)"
-                aria-label="Filter by speaker"
-              />
+              <input type="text" id="speaker-filter" name="speaker" placeholder="(optional)" aria-label="Filter by speaker" />
             </div>
 
             <div class="field">
@@ -98,174 +105,276 @@
           </div>
 
           <div class="actions">
-            <button type="submit" class="cta-primary">Search</button>
+            <button type="submit" class="btn cta-primary" aria-label="Run search">Search</button>
+            <button type="button" id="search-clear" class="btn btn-ghost" aria-label="Clear search">Clear</button>
           </div>
+
+          <div id="search-hint" class="muted small" aria-hidden="true">Tip: ask natural questions. If no backend is available, placeholder results will appear.</div>
         </form>
       </section>
 
-      <!-- SEARCH RESULTS -->
+      <!-- RESULTS -->
       <section class="card" aria-labelledby="results-heading">
         <h2 id="results-heading">Results</h2>
         <div id="search-results" class="results-list" role="region" aria-live="polite" aria-atomic="true">
-          <!-- Filled dynamically by /js/search.js or by the fallback below -->
+          <div class="muted">No results yet. Enter a query above and press Search.</div>
         </div>
       </section>
 
+      <!-- NOTES -->
+      <section class="card" aria-labelledby="notes-heading">
+        <h2 id="notes-heading">Notes</h2>
+        <ul class="list subtle">
+          <li>Search behavior can be wired to a backend via <code>window.sti.search.perform</code> or exported function <code>performSearch</code>.</li>
+          <li>For production, replace placeholder rendering with structured result templates (speaker, timestamp, confidence).</li>
+        </ul>
+      </section>
     </div>
   </main>
 
-  <!-- FOOTER -->
-  <footer role="contentinfo" class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container">
       <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
     </div>
   </footer>
 
-  <!-- Toast Notification -->
-  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+  <!-- Toast area -->
+  <div id="toast" class="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
 
-  <!-- Scripts (deferred so DOM is available). Order: toast, main, search -->
-  <script defer src="/js/toast.js"></script>
+  <!-- Core scripts (recommend bundling into one file for production) -->
   <script defer src="/js/main.js"></script>
   <script defer src="/js/search.js"></script>
 
-  <!-- Defensive inline script: ensures theme, toast, and search form work if external scripts are missing -->
+  <!-- Resilient inline bootstrap: namespaced utilities + search fallback rendering -->
   <script>
     (function () {
-      function safeInit() {
-        // showToast fallback
-        if (typeof window.showToast !== 'function') {
-          window.showToast = function (message, timeout) {
+      // Minimal shared namespace and utilities
+      if (!window.sti) window.sti = {};
+      if (!window.sti.utils) {
+        window.sti.utils = {
+          toast: function (message, timeout) {
             try {
-              var toast = document.getElementById('toast');
-              if (!toast) { alert(message); return; }
-              toast.textContent = message;
-              toast.classList.add('visible');
+              var t = document.getElementById('toast');
+              if (!t) { alert(message); return; }
+              t.hidden = false;
+              t.textContent = String(message || '');
+              t.classList.add('visible');
               timeout = typeof timeout === 'number' ? timeout : 3000;
-              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
-            } catch (e) {
-              console.warn('showToast fallback failed', e);
-              alert(message);
-            }
-          };
-        }
+              clearTimeout(t.__timer);
+              t.__timer = setTimeout(function () { t.classList.remove('visible'); t.hidden = true; }, timeout);
+            } catch (e) { try { alert(message); } catch (e2) {} }
+          },
 
-        // Theme toggle fallback + restore persisted preference
-        var themeToggle = document.getElementById('theme-toggle');
-        var themeLink = document.getElementById('theme-link');
-        if (themeToggle && themeLink) {
-          if (!themeToggle.__fallbackAttached) {
-            themeToggle.addEventListener('click', function () {
-              try {
-                var href = themeLink.getAttribute('href') || '/css/theme-light.css';
-                var isDark = href.indexOf('dark') !== -1;
-                var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
-                themeLink.setAttribute('href', next);
-                themeToggle.setAttribute('aria-pressed', String(!isDark));
-                try { localStorage.setItem('sti-theme', next); } catch (e) {}
-              } catch (e) {
-                console.warn('Theme toggle fallback error', e);
-              }
-            }, { passive: true });
-            themeToggle.__fallbackAttached = true;
+          fetchJson: function (url, opts, timeoutMs) {
+            timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 10000;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller) opts = Object.assign({ signal: controller.signal }, opts || {});
+            var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+            return fetch(url, opts).then(function (res) {
+              if (timer) clearTimeout(timer);
+              if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+              return res.json ? res.json() : res.text();
+            });
+          },
+
+          setTheme: function (href) {
+            var link = document.getElementById('theme-link');
+            if (!link) return;
+            link.setAttribute('href', href);
+            try { localStorage.setItem('sti-theme', href); } catch (e) {}
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.setAttribute('aria-pressed', String(href.indexOf('dark') !== -1));
           }
+        };
+      }
 
-          try {
-            var stored = localStorage.getItem('sti-theme');
-            if (stored) themeLink.setAttribute('href', stored);
-          } catch (e) {}
-        }
+      // restore theme if saved
+      try {
+        var saved = localStorage.getItem('sti-theme');
+        if (saved) window.sti.utils.setTheme(saved);
+      } catch (e) {}
 
-        // Search form handler: prefer window.performSearch (or sti.search.perform) if provided by /js/search.js
+      // theme toggle wiring
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle && !themeToggle.__stiAttached) {
+        themeToggle.addEventListener('click', function () {
+          var link = document.getElementById('theme-link');
+          if (!link) return;
+          var curr = link.getAttribute('href') || '/css/base.css';
+          var next = curr.indexOf('dark') !== -1 ? '/css/base.css' : '/css/theme-dark.css';
+          window.sti.utils.setTheme(next);
+        });
+        themeToggle.__stiAttached = true;
+      }
+
+      // sidebar toggle
+      var sidebarToggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('site-sidebar');
+      var primaryNav = document.getElementById('primary-nav');
+      if (sidebarToggle && sidebar && primaryNav && !sidebarToggle.__stiAttached) {
+        sidebarToggle.addEventListener('click', function () {
+          var expanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', String(!expanded));
+          sidebar.classList.toggle('collapsed', expanded);
+          primaryNav.hidden = expanded;
+        });
+        sidebarToggle.__stiAttached = true;
+      }
+
+      // backend status helper
+      var statusEl = document.getElementById('backend-status');
+      function setStatus(ok, label) {
+        if (!statusEl) return;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.classList.toggle('error', !ok);
+        var dot = statusEl.querySelector('.status-dot');
+        var lbl = statusEl.querySelector('.status-label');
+        if (dot) dot.setAttribute('data-state', ok ? 'ok' : 'error');
+        if (lbl) lbl.textContent = label || (ok ? 'Backend connected' : 'Demo mode (no backend)');
+      }
+
+      // quick health-check (non-blocking)
+      try {
+        window.sti.utils.fetchJson('/api/health', {}, 1500).then(function () {
+          setStatus(true, 'Backend connected');
+        }).catch(function () {
+          setStatus(false, 'Demo mode (no backend)');
+        });
+      } catch (e) {
+        setStatus(false, 'Demo mode (no backend)');
+      }
+
+      // Search form handling (prefer external implementation if present)
+      function renderPlaceholderResults(query) {
+        var results = document.getElementById('search-results');
+        if (!results) return;
+        results.innerHTML = '';
+        var info = document.createElement('div');
+        info.className = 'muted';
+        info.textContent = 'No backend search available. Placeholder results for: "' + query + '"';
+        results.appendChild(info);
+
+        var list = document.createElement('ul');
+        list.className = 'list subtle';
+        var r1 = document.createElement('li');
+        r1.textContent = 'Sample result — "Decision: adopt pricing model A" (session: roadmap-2025-10-01)';
+        var r2 = document.createElement('li');
+        r2.textContent = 'Sample result — "Action: John to follow up on vendor quotes" (session: sprint-planning-2025-09-15)';
+        list.appendChild(r1);
+        list.appendChild(r2);
+        results.appendChild(list);
+      }
+
+      function wireSearchForm() {
         var form = document.getElementById('search-form');
         var results = document.getElementById('search-results');
+        var clearBtn = document.getElementById('search-clear');
 
-        function renderPlaceholderResults(query) {
-          if (!results) return;
-          results.innerHTML = '';
-          var info = document.createElement('div');
-          info.className = 'muted';
-          info.textContent = 'No backend search available. Showing placeholder results for: "' + query + '".';
-          results.appendChild(info);
+        if (!form || form.__handled) return;
 
-          var list = document.createElement('ul');
-          list.className = 'list subtle';
-          var r1 = document.createElement('li');
-          r1.textContent = 'Sample result — "Decision: adopt pricing model A" (session: roadmap-2025-10-01)';
-          var r2 = document.createElement('li');
-          r2.textContent = 'Sample result — "Action: John to follow up on vendor quotes" (session: sprint-planning-2025-09-15)';
-          list.appendChild(r1);
-          list.appendChild(r2);
-          results.appendChild(list);
-        }
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var q = (document.getElementById('search-input') || {}).value || '';
+          var speaker = (document.getElementById('speaker-filter') || {}).value || '';
+          var from = (document.getElementById('date-from') || {}).value || '';
+          var to = (document.getElementById('date-to') || {}).value || '';
 
-        if (form && !form.__handled) {
-          form.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var q = (document.getElementById('search-input') || {}).value || '';
-            var speaker = (document.getElementById('speaker-filter') || {}).value || '';
-            var from = (document.getElementById('date-from') || {}).value || '';
-            var to = (document.getElementById('date-to') || {}).value || '';
+          if (!q.trim()) {
+            window.sti.utils.toast('Please enter a search query.', 2200);
+            return;
+          }
 
-            if (!q.trim()) {
-              window.showToast('Please enter a search query.', 2200);
-              return;
-            }
+          // Prefer canonical implementations:
+          // 1) window.sti.search.perform(query, opts)
+          // 2) global performSearch(query, opts)
+          var impl = (window.sti && window.sti.search && window.sti.search.perform) || window.performSearch || window.perform && window.perform.search;
 
-            // Try common exported names from search.js
-            var impl = window.performSearch || (window.sti && sti.search && sti.search.perform) || (window.perform && window.perform.search);
-
-            if (typeof impl === 'function') {
-              try {
-                var out = impl(q, { speaker: speaker, dateFrom: from, dateTo: to });
-                // If implementation returns a promise, let it handle rendering; otherwise render if array returned
-                if (out && typeof out.then === 'function') {
-                  out.catch(function (err) {
-                    console.error('search implementation error', err);
-                    window.showToast('Search failed', 2000);
-                    renderPlaceholderResults(q);
-                  });
-                } else if (out && Array.isArray(out)) {
-                  // Best-effort rendering of simple arrays
-                  results.innerHTML = '';
-                  var list = document.createElement('ul'); list.className = 'list subtle';
-                  out.forEach(function (it) {
-                    var li = document.createElement('li');
-                    li.textContent = typeof it === 'string' ? it : (it.title || JSON.stringify(it));
-                    list.appendChild(li);
-                  });
-                  results.appendChild(list);
-                } else {
-                  // implementation provided but didn't return usable content -> fallback
+          if (typeof impl === 'function') {
+            try {
+              var out = impl(q, { speaker: speaker, dateFrom: from, dateTo: to });
+              // promise-based implementation
+              if (out && typeof out.then === 'function') {
+                // let implementation render results or return data
+                out.then(function (data) {
+                  // If developer returned raw array, render it
+                  if (Array.isArray(data)) {
+                    results.innerHTML = '';
+                    var list = document.createElement('ul'); list.className = 'list subtle';
+                    data.forEach(function (it) {
+                      var li = document.createElement('li');
+                      li.textContent = typeof it === 'string' ? it : (it.title || JSON.stringify(it));
+                      list.appendChild(li);
+                    });
+                    results.appendChild(list);
+                  }
+                }).catch(function (err) {
+                  console.error('search impl failed', err);
+                  window.sti.utils.toast('Search failed', 2000);
                   renderPlaceholderResults(q);
-                }
-              } catch (err) {
-                console.error('performSearch threw', err);
-                window.showToast('Search failed', 2000);
+                });
+              } else if (Array.isArray(out)) {
+                // synchronous array result
+                results.innerHTML = '';
+                var list = document.createElement('ul'); list.className = 'list subtle';
+                out.forEach(function (it) {
+                  var li = document.createElement('li');
+                  li.textContent = typeof it === 'string' ? it : (it.title || JSON.stringify(it));
+                  list.appendChild(li);
+                });
+                results.appendChild(list);
+              } else {
+                // unsupported return type — fallback
                 renderPlaceholderResults(q);
               }
-            } else {
+            } catch (err) {
+              console.error('performSearch threw', err);
+              window.sti.utils.toast('Search failed', 2000);
               renderPlaceholderResults(q);
-              window.showToast('Displayed placeholder results (demo)', 1600);
             }
-          });
-          form.__handled = true;
+          } else {
+            // no implementation exposed — show placeholder results
+            renderPlaceholderResults(q);
+            window.sti.utils.toast('Displayed placeholder results (demo)', 1600);
+          }
+        }, { passive: true });
+
+        if (clearBtn) {
+          clearBtn.addEventListener('click', function () {
+            form.reset();
+            var results = document.getElementById('search-results');
+            if (results) results.innerHTML = '<div class="muted">Cleared. Enter a new query above.</div>';
+          }, { passive: true });
         }
 
-        // Initial hint if results are empty
-        if (results && results.children.length === 0) {
+        form.__handled = true;
+      }
+
+      // initial hint when no results present
+      function ensureInitialHint() {
+        var results = document.getElementById('search-results');
+        if (!results) return;
+        if (!results.children || results.children.length === 0) {
           var hint = document.createElement('p');
           hint.className = 'muted';
-          hint.textContent = 'Enter a query above and press Search. If you see placeholder results, the demo search is active.';
+          hint.textContent = 'Enter a query above and press Search. If you see placeholder results, demo mode is active.';
           results.appendChild(hint);
         }
       }
 
+      // init on DOM ready
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', safeInit);
+        document.addEventListener('DOMContentLoaded', function () {
+          wireSearchForm();
+          ensureInitialHint();
+        });
       } else {
-        safeInit();
+        wireSearchForm();
+        ensureInitialHint();
       }
+
+      // expose helpers for other scripts
+      window.sti.setStatus = setStatus || function () {};
+      window.sti.toast = window.sti.utils.toast;
     })();
   </script>
 

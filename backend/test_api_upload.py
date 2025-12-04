@@ -21,6 +21,7 @@ Notes:
 import io
 import os
 import importlib
+import logging
 from typing import List
 
 import pytest
@@ -28,6 +29,9 @@ import pytest
 # These imports are optional; skip tests gracefully if not available
 fastapi = pytest.importorskip("fastapi", reason="fastapi is required for API contract tests")
 TestClient = pytest.importorskip("fastapi.testclient", reason="fastapi.testclient is required for API contract tests").TestClient
+
+LOG = logging.getLogger("test_api_upload")
+LOG.setLevel(os.getenv("TEST_LOG_LEVEL", "INFO"))
 
 # Try to locate the app
 APP_MODULE_CANDIDATES = ("backend.app", "backend.routes", "app", "routes")
@@ -52,7 +56,7 @@ for modname in APP_MODULE_CANDIDATES:
                 app_module_name = modname
                 break
     except Exception:
-        continue
+        LOG.debug("Module %s not importable for app discovery", modname)
 
 if app is None:
     pytest.skip("No FastAPI/Starlette `app` found in modules: " + ", ".join(APP_MODULE_CANDIDATES))
@@ -74,7 +78,7 @@ def _discover_upload_paths(app) -> List[str]:
         low = path.lower()
         if any(k in low for k in ("upload", "transcribe", "ingest", "audio", "upload-audio")):
             candidates.append(path)
-        # include presign as potential helper endpoint
+        # include presign and start-workflow as potential helper endpoints
         if "presign" in low or "presigned" in low:
             candidates.append(path)
         if "start-workflow" in low or "start_workflow" in low:
@@ -101,6 +105,10 @@ if not UPLOAD_ENDPOINT_CANDIDATES:
     # If no obvious candidates found, include a small set of reasonable defaults to try
     UPLOAD_ENDPOINT_CANDIDATES = ["/upload", "/uploads", "/transcribe", "/ingest/audio", "/audio/upload", "/presign", "/start-workflow"]
 
+# Allow overriding candidate selection via env var for CI or specialized deployments
+_env_paths = os.getenv("TEST_UPLOAD_PATHS")
+if _env_paths:
+    UPLOAD_ENDPOINT_CANDIDATES = [p.strip() for p in _env_paths.split(",") if p.strip()]
 
 @pytest.fixture(scope="module")
 def client():
@@ -130,11 +138,15 @@ def _assert_response_json_has_expected_key(json_obj: dict):
     """
     Contract: response JSON should contain at least one useful key pointing to the upload/result.
     """
-    expected_keys = {"s3_uri", "s3_path", "upload_id", "id", "location", "status", "result", "transcript"}
+    expected_keys = {"s3_uri", "s3_path", "upload_id", "id", "location", "status", "result", "transcript", "workflow"}
     if not any(k in json_obj for k in expected_keys):
         # be lenient: also accept short keys that look like urls or dicts containing these
         if any(isinstance(v, str) and (v.startswith("s3://") or v.startswith("/")) for v in json_obj.values()):
             return
+        # Accept nested result object that might contain expected keys
+        for v in json_obj.values():
+            if isinstance(v, dict) and any(k in v for k in expected_keys):
+                return
         pytest.fail(
             "Response JSON did not contain expected keys. Expected one of "
             f"{expected_keys}. Actual keys: {list(json_obj.keys())}"
@@ -148,21 +160,50 @@ def test_upload_endpoint_accepts_file_and_returns_json(client, path):
     Accepts first successful candidate that returns 200/201/202 and JSON.
     """
     audio_bytes = _make_test_audio_bytes()
-    files = {"file": ("test.wav", audio_bytes, "audio/wav")}
-    try:
-        resp = client.post(path, files=files)
-    except Exception as e:
-        pytest.skip(f"POST to {path} raised exception (route may not exist): {e}")
+    # Try a common multipart key 'file' first, but also try 'audio' if server expects that.
+    for form_key in ("file", "audio", "upload"):
+        files = {form_key: ("test.wav", audio_bytes, "audio/wav")}
+        try:
+            resp = client.post(path, files=files, timeout=30)
+        except Exception as e:
+            LOG.debug("POST to %s with key %s raised: %s", path, form_key, e)
+            resp = None
 
-    # If route is not found or method not allowed, skip
+        if resp is None:
+            continue
+
+        # If route is not found or method not allowed, skip this candidate
+        if resp.status_code in (404, 405):
+            pytest.skip(f"Endpoint {path} not implemented (status={resp.status_code}).")
+
+        assert resp.status_code in (200, 201, 202), (
+            f"Unexpected status code {resp.status_code} for {path} (form key={form_key}). "
+            f"Response text: {resp.text}"
+        )
+
+        try:
+            j = resp.json()
+        except ValueError:
+            pytest.fail(f"Response from {path} is not valid JSON. Response text: {resp.text}")
+        assert isinstance(j, dict), f"Expected JSON object from {path}, got {type(j)}"
+        _assert_response_json_has_expected_key(j)
+        # If we successfully validated one form key, consider the test passed for this path.
+        return
+
+    # If none of the form keys produced a valid response, try raw body upload (some APIs accept binary body)
+    try:
+        resp = client.post(path, data=audio_bytes, headers={"Content-Type": "audio/wav"}, timeout=30)
+    except Exception as e:
+        pytest.skip(f"POST to {path} raised exception (route may not exist or reject raw body): {e}")
+
     if resp.status_code in (404, 405):
         pytest.skip(f"Endpoint {path} not implemented (status={resp.status_code}).")
-    assert resp.status_code in (200, 201, 202), f"Unexpected status code {resp.status_code} for {path}. Response text: {resp.text}"
+    assert resp.status_code in (200, 201, 202), f"Unexpected status code {resp.status_code} for raw POST to {path}. Response text: {resp.text}"
     try:
         j = resp.json()
     except ValueError:
-        pytest.fail(f"Response from {path} is not valid JSON. Response text: {resp.text}")
-    assert isinstance(j, dict), f"Expected JSON object from {path}, got {type(j)}"
+        pytest.fail(f"Response from raw POST to {path} is not valid JSON. Response text: {resp.text}")
+    assert isinstance(j, dict)
     _assert_response_json_has_expected_key(j)
 
 
@@ -173,7 +214,7 @@ def test_upload_missing_file_returns_4xx(client, path):
     If endpoint not found (404/405) we skip.
     """
     try:
-        resp = client.post(path, data={"some": "value"})
+        resp = client.post(path, data={"some": "value"}, timeout=10)
     except Exception as e:
         pytest.skip(f"POST to {path} raised exception (route may not exist): {e}")
     if resp.status_code in (404, 405):
@@ -190,7 +231,7 @@ def test_upload_endpoint_handles_large_file_gracefully(client):
     files = {"file": ("big_test.wav", audio_bytes, "audio/wav")}
     path = UPLOAD_ENDPOINT_CANDIDATES[0]
     try:
-        resp = client.post(path, files=files)
+        resp = client.post(path, files=files, timeout=30)
     except Exception as e:
         pytest.skip(f"POST to {path} raised exception (route may not exist): {e}")
     if resp.status_code in (404, 405):

@@ -1,211 +1,381 @@
-// overview.js — Final corrected
-// Minimal behaviors for the Overview page. Reuses upload and dashboard logic where available.
-// Provides quick upload wiring and a robust session preview that degrades gracefully.
+/**
+ * overview.js — Corrected, enhanced, and upgraded Overview page module
+ *
+ * Responsibilities:
+ * - Populate the "recent sessions" preview robustly from /sessions (configurable)
+ * - Wire quick upload inputs (reusing sti.main.uploadFile when available)
+ * - Provide graceful fallbacks and demo data when backend is unavailable
+ * - Expose a stable API on window.sti.overview:
+ *     .init(opts) -> void
+ *     .refresh(limit) -> Promise<boolean>
+ *     .populatePreview(limit) -> Promise<array|null>
+ *     .configure(cfg) -> void
+ *     .setFetch(fn) / .setAbortController(Ctor) -> test hooks
+ * - Emit CustomEvents for integration/tests:
+ *     sti:overview:ready, sti:overview:refresh:start, sti:overview:refresh:ok,
+ *     sti:overview:refresh:fail
+ *
+ * Defensive: idempotent init, tolerant parsing, timeouts, abort support, small retries.
+ */
+
 (function () {
   'use strict';
 
-  var sti = window.sti || (window.sti = {});
+  // ---------- Namespace & API ----------
+  const sti = window.sti || (window.sti = {});
   sti.overview = sti.overview || {};
+  const api = sti.overview;
 
-  // Configurable endpoints (override via window.STI if needed)
-  var SESSIONS_ENDPOINT = (window.STI && window.STI.SESSIONS_ENDPOINT) || window.STI_SESSIONS_ENDPOINT || '/sessions';
-  var FETCH_TIMEOUT_MS = (window.STI && window.STI.FETCH_TIMEOUT_MS) || 2500;
+  // ---------- Default config (can be overridden by configure) ----------
+  const DEFAULTS = {
+    SESSIONS_ENDPOINT: '/sessions',
+    FETCH_TIMEOUT_MS: 2500,
+    PREVIEW_LIMIT: 5,
+    RETRY_ATTEMPTS: 2,
+    RETRY_BASE_DELAY_MS: 250,
+    SELECTORS: {
+      recentList: '#recent-sessions', // fallback id(s) supported in code
+      fileInputs: 'input[type="file"][data-upload]'
+    },
+    DEMO_DATA: [
+      { id: 'demo-1', title: 'Demo: Project kick-off', status: 'completed', summary: 'Intro and goals.' },
+      { id: 'demo-2', title: 'Demo: Sprint planning', status: 'queued', summary: 'Roadmap and action items.' }
+    ]
+  };
 
-  // Normalize endpoint
-  if (Array.isArray(SESSIONS_ENDPOINT)) SESSIONS_ENDPOINT = SESSIONS_ENDPOINT[0];
+  // live config copied to api._config
+  api._config = Object.assign({}, DEFAULTS);
 
-  function safeToast(msg, t) {
-    if (typeof window.showToast === 'function') {
-      try { window.showToast(msg, t || 2000); } catch (e) { if (console && console.info) console.info('Toast:', msg); }
-    } else if (console && console.info) {
-      console.info('Toast:', msg);
-    }
-  }
+  // platform/test hooks
+  api._fetchOverride = null;
+  api._AbortControllerOverride = null;
 
-  // Helper: try parse JSON or return null
+  // ---------- Small utilities ----------
+  function _now() { return Date.now(); }
+  function _trim(s) { return String(s == null ? '' : s).trim(); }
+  function _log(...args) { if (console && console.debug) console.debug('sti.overview:', ...args); }
+
   function _tryParseJson(text) {
+    if (text === undefined || text === null) return null;
+    if (typeof text === 'object') return text;
     try { return JSON.parse(text); } catch (e) { return null; }
   }
 
-  // Simple fetch with timeout returning parsed JSON or null on failure
-  function fetchJsonWithTimeout(url, timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : FETCH_TIMEOUT_MS;
-    var controller = new AbortController();
-    var id = setTimeout(function () { controller.abort(); }, timeoutMs);
-    return fetch(url, { method: 'GET', credentials: 'same-origin', signal: controller.signal })
-      .then(function (res) {
-        clearTimeout(id);
-        if (!res.ok) {
-          if (console && console.info) console.info('fetch failed', url, res.status);
-          throw new Error('Network response not ok: ' + res.status);
-        }
-        return res.text().then(function (txt) {
-          // try json, jsonl first-line, else null
-          var p = _tryParseJson(txt);
-          if (p !== null) return p;
-          var first = (txt || '').split(/\r?\n/).find(Boolean) || '';
-          p = _tryParseJson(first);
-          if (p !== null) return p;
-          return null;
-        });
-      })
-      .catch(function (err) {
-        clearTimeout(id);
-        // non-fatal: log and return null
-        if (console && console.debug) console.debug('fetchJsonWithTimeout failed for', url, err && err.message ? err.message : err);
-        return null;
-      });
+  function _createMutedItem(text) {
+    const li = document.createElement('li');
+    li.className = 'muted';
+    li.textContent = String(text || '');
+    li.setAttribute('aria-hidden', 'false');
+    return li;
   }
 
-  // Populate the "recent sessions" list; accepts optional limit param
-  async function populatePreview(limit) {
-    limit = typeof limit === 'number' ? limit : 5;
-    var listEl = document.getElementById('recent-sessions') || document.getElementById('recent-sessions-list');
-    if (!listEl) return;
+  function _getRecentListEl() {
+    const sel = api._config.SELECTORS.recentList;
+    let el = null;
+    try { el = document.querySelector(sel); } catch (e) { el = null; }
+    if (!el) {
+      // try legacy id
+      el = document.getElementById('recent-sessions') || document.getElementById('recent-sessions-list');
+    }
+    return el;
+  }
 
-    // show loading placeholder
-    listEl.innerHTML = '';
-    var loading = document.createElement('li');
-    loading.className = 'muted';
-    loading.textContent = 'Loading sessions...';
-    listEl.appendChild(loading);
+  function _makeSessionLink(id, title) {
+    const a = document.createElement('a');
+    a.textContent = title || id || 'Session';
+    try {
+      // Use session query param to be consistent with sessions page nav
+      const href = '/sessions.html?session=' + encodeURIComponent(id || '');
+      a.setAttribute('href', href);
+    } catch (e) {
+      a.setAttribute('href', '#');
+    }
+    a.setAttribute('aria-label', a.textContent);
+    return a;
+  }
 
-    // try a few endpoint shapes: /sessions?limit=5 or /sessions?size=5
-    var urls = [
-      SESSIONS_ENDPOINT + '?limit=' + encodeURIComponent(limit),
-      SESSIONS_ENDPOINT + '?size=' + encodeURIComponent(limit),
-      SESSIONS_ENDPOINT
-    ];
+  // ---------- Fetch with timeout + retries ----------
+  async function _fetchWithTimeout(url, opts = {}, timeoutMs = api._config.FETCH_TIMEOUT_MS) {
+    if (!url) throw new TypeError('_fetchWithTimeout: url required');
 
-    var data = null;
-    for (var i = 0; i < urls.length; i++) {
-      try {
-        data = await fetchJsonWithTimeout(urls[i]);
-      } catch (e) {
-        data = null;
+    const fetchFn = api._fetchOverride || window.fetch;
+    if (typeof fetchFn !== 'function') throw new Error('Fetch not available');
+
+    const AbortCtor = api._AbortControllerOverride || window.AbortController;
+    const controller = AbortCtor ? new AbortCtor() : null;
+    const finalOpts = Object.assign({}, opts);
+    if (controller) finalOpts.signal = controller.signal;
+    finalOpts.credentials = finalOpts.credentials || 'same-origin';
+
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+      const res = await fetchFn(url, finalOpts);
+      const txt = await (res.text ? res.text().catch(() => '') : Promise.resolve(''));
+      if (!res.ok) {
+        const parsed = _tryParseJson(txt);
+        const err = new Error('Network error: ' + res.status);
+        err.status = res.status;
+        err.body = parsed !== null ? parsed : txt;
+        throw err;
       }
-      if (data) break;
+      // prefer JSON if parseable, else try first non-empty line (jsonl)
+      const parsed = _tryParseJson(txt);
+      if (parsed !== null) return parsed;
+      const first = (txt || '').split(/\r?\n/).find(Boolean) || '';
+      const firstParsed = _tryParseJson(first);
+      if (firstParsed !== null) return firstParsed;
+      return txt;
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        const e = new Error('Request aborted/timeout');
+        e.code = 'ABORT';
+        throw e;
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
+  }
 
+  async function _fetchWithRetries(url, opts = {}, attempts = api._config.RETRY_ATTEMPTS, baseDelay = api._config.RETRY_BASE_DELAY_MS) {
+    let lastErr = null;
+    for (let i = 0; i <= Math.max(0, attempts); i++) {
+      try {
+        return await _fetchWithTimeout(url, opts, api._config.FETCH_TIMEOUT_MS);
+      } catch (err) {
+        lastErr = err;
+        _log('fetch attempt', i, 'failed', err && err.message ? err.message : err);
+        if (i < attempts) {
+          // backoff
+          const backoff = baseDelay * Math.pow(2, i);
+          await new Promise(r => setTimeout(r, backoff));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  // ---------- Rendering helpers ----------
+  function _renderSessionsInto(listEl, sessions, limit) {
+    if (!listEl) return;
     listEl.innerHTML = '';
-    if (!data) {
-      // fallback demo entry
-      var li = document.createElement('li');
-      li.className = 'muted';
-      li.textContent = 'Sessions API not available — showing demo data';
-      listEl.appendChild(li);
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      listEl.appendChild(_createMutedItem('No sessions found'));
       return;
     }
 
-    var arr = Array.isArray(data) ? data : (Array.isArray(data.sessions) ? data.sessions : (Array.isArray(data.items) ? data.items : []));
-    if (!arr || arr.length === 0) {
-      var empty = document.createElement('li');
-      empty.className = 'muted';
-      empty.textContent = 'No sessions found';
-      listEl.appendChild(empty);
-      return;
-    }
-
-    arr.slice(0, limit).forEach(function (s) {
-      var li = document.createElement('li');
+    const frag = document.createDocumentFragment();
+    const slice = sessions.slice(0, typeof limit === 'number' ? limit : api._config.PREVIEW_LIMIT);
+    slice.forEach(s => {
+      const li = document.createElement('li');
       li.className = 'overview-session';
 
-      var title = document.createElement('a');
-      var id = s && (s.id || s.session_id || s.upload_id || s.key || s.name) || '';
-      title.textContent = (s && (s.title || s.name)) || id || 'Session';
-      // link to session detail page if exists
-      try { title.href = '/sessions.html#' + encodeURIComponent(id); } catch (e) { title.href = '#'; }
-      title.setAttribute('aria-label', title.textContent);
-      li.appendChild(title);
+      const id = (s && (s.id || s.session_id || s.upload_id || s.key || s.name)) || '';
+      const titleText = (s && (s.title || s.name || s.summary || id)) || id || 'Session';
+      const link = _makeSessionLink(id, titleText);
+      li.appendChild(link);
 
-      var meta = document.createElement('div');
+      const meta = document.createElement('div');
       meta.className = 'muted small';
-      var status = (s && (s.status || s.state)) || 'unknown';
-      var duration = '';
+      const status = (s && (s.status || s.state)) || 'unknown';
+      let duration = '';
       try {
-        var dur = (s && s.meta && s.meta.duration) ? s.meta.duration : (s && s.duration ? s.duration : null);
-        if (dur != null) duration = ' • ' + Math.round(Number(dur)) + 's';
-      } catch (e) { duration = ''; }
+        const dur = (s && s.meta && s.meta.duration) || s.duration || null;
+        if (dur != null && !Number.isNaN(Number(dur))) duration = ' • ' + Math.round(Number(dur)) + 's';
+      } catch (_) { duration = ''; }
       meta.textContent = status + (duration || '');
       li.appendChild(meta);
 
-      // optional snippet or summary
-      if (s && (s.summary || s.snippet || s.excerpt || (s.transcript && s.transcript.slice))) {
-        var snippet = document.createElement('p');
-        snippet.className = 'small';
-        var text = s.summary || s.snippet || s.excerpt || (typeof s.transcript === 'string' ? s.transcript.slice(0, 200) : '');
-        snippet.textContent = (text || '').replace(/\s+/g, ' ').trim();
-        li.appendChild(snippet);
+      const snippet = (s && (s.summary || s.snippet || s.excerpt || (typeof s.transcript === 'string' ? s.transcript : ''))) || '';
+      if (snippet) {
+        const p = document.createElement('p');
+        p.className = 'small';
+        p.textContent = String(snippet).replace(/\s+/g, ' ').trim().slice(0, 300);
+        li.appendChild(p);
       }
 
-      listEl.appendChild(li);
+      frag.appendChild(li);
     });
+
+    listEl.appendChild(frag);
   }
 
-  // Wire quick upload if upload API exists (delegates to sti.upload if present)
-  function wireQuickUpload() {
-    // prefer existing upload binding from upload.js
-    if (sti.upload && typeof sti.upload.bindUploadForm === 'function') {
-      try { sti.upload.bindUploadForm(); } catch (e) { if (console && console.warn) console.warn('bindUploadForm error', e); }
-      return;
+  // ---------- Data population ----------
+  // returns array of sessions or null on failure
+  async function populatePreview(limit = api._config.PREVIEW_LIMIT) {
+    const listEl = _getRecentListEl();
+    if (!listEl) return null;
+
+    // show loading state
+    listEl.innerHTML = '';
+    listEl.appendChild(_createMutedItem('Loading sessions...'));
+
+    const base = api._config.SESSIONS_ENDPOINT || DEFAULTS.SESSIONS_ENDPOINT;
+    const urls = [
+      `${base}?limit=${encodeURIComponent(limit)}`,
+      `${base}?size=${encodeURIComponent(limit)}`,
+      base
+    ];
+
+    let data = null;
+    try {
+      // try multiple candidate urls with retries
+      for (let i = 0; i < urls.length; i++) {
+        try {
+          data = await _fetchWithRetries(urls[i], { method: 'GET' }, Math.max(0, api._config.RETRY_ATTEMPTS));
+          if (data) break;
+        } catch (err) {
+          _log('candidate sessions endpoint failed', urls[i], err && err.message ? err.message : err);
+        }
+      }
+    } catch (err) {
+      _log('populatePreview fetch attempts exhausted', err && err.message ? err.message : err);
+      data = null;
     }
 
-    // fallback: wire inputs with data-upload attribute via sti.main.uploadFile if available
-    var fileInputs = Array.prototype.slice.call(document.querySelectorAll('input[type="file"][data-upload]'));
-    if (!fileInputs.length) return;
-    fileInputs.forEach(function (el) {
-      if (el.__overviewBound) return;
-      el.addEventListener('change', async function () {
-        var files = el.files || [];
+    // clear loading
+    listEl.innerHTML = '';
+
+    if (!data) {
+      // fallback to demo data
+      listEl.appendChild(_createMutedItem('Sessions API not available — showing demo data'));
+      _renderSessionsInto(listEl, api._config.DEMO_DATA, limit);
+      document.dispatchEvent(new CustomEvent('sti:overview:refresh:fail', { detail: { reason: 'no_backend' } }));
+      return api._config.DEMO_DATA.slice(0, limit);
+    }
+
+    // normalize into an array
+    let arr = [];
+    if (Array.isArray(data)) arr = data;
+    else if (Array.isArray(data.sessions)) arr = data.sessions;
+    else if (Array.isArray(data.items)) arr = data.items;
+    else if (typeof data === 'object' && data !== null) {
+      // find first array property
+      const ks = Object.keys(data);
+      for (let k = 0; k < ks.length; k++) {
+        if (Array.isArray(data[ks[k]])) { arr = data[ks[k]]; break; }
+      }
+      // if still empty and object seems like a single session, wrap it
+      if (!arr.length && Object.keys(data).length && (data.id || data.title || data.session_id)) arr = [data];
+    }
+
+    if (!arr || arr.length === 0) {
+      listEl.appendChild(_createMutedItem('No sessions found'));
+      document.dispatchEvent(new CustomEvent('sti:overview:refresh:ok', { detail: { sessions: [] } }));
+      return [];
+    }
+
+    _renderSessionsInto(listEl, arr, limit);
+    document.dispatchEvent(new CustomEvent('sti:overview:refresh:ok', { detail: { sessions: arr.slice(0, limit) } }));
+    return arr.slice(0, limit);
+  }
+
+  // ---------- Quick upload wiring ----------
+  function wireQuickUpload() {
+    // if a dedicated upload module exists, prefer it
+    if (sti.upload && typeof sti.upload.bindUploadForm === 'function') {
+      try { sti.upload.bindUploadForm(); return; } catch (e) { _log('sti.upload.bindUploadForm failed', e); }
+    }
+
+    // otherwise wire data-upload inputs and reuse sti.main.uploadFile if available
+    const selector = api._config.SELECTORS.fileInputs || DEFAULTS.SELECTORS.fileInputs;
+    let inputs = [];
+    try { inputs = Array.prototype.slice.call(document.querySelectorAll(selector)); } catch (e) { inputs = []; }
+    if (!inputs.length) return;
+
+    inputs.forEach(input => {
+      if (input.__overviewBound) return;
+      input.addEventListener('change', async () => {
+        const files = input.files || [];
         if (!files.length) return;
         try {
-          safeToast('Uploading...', 1200);
+          _safeToast('Uploading...', 1200);
           if (sti.main && typeof sti.main.uploadFile === 'function') {
-            var res = await sti.main.uploadFile(files[0], {
-              presignEndpoint: el.dataset.presignEndpoint || undefined,
-              uploadEndpoint: el.dataset.uploadEndpoint || undefined,
-              startWorkflow: el.dataset.startWorkflow === 'true'
+            const res = await sti.main.uploadFile(files[0], {
+              presignEndpoint: input.dataset.presignEndpoint || undefined,
+              uploadEndpoint: input.dataset.uploadEndpoint || undefined,
+              startWorkflow: input.dataset.startWorkflow === 'true'
             });
             if (res && res.ok) {
-              safeToast('Upload requested', 1400);
-              // refresh preview to catch newly uploaded session
-              setTimeout(function () { populatePreview(5); }, 1200);
+              _safeToast('Upload requested', 1400);
+              // refresh preview with a small delay to let backend settle
+              setTimeout(() => populatePreview(api._config.PREVIEW_LIMIT).catch(() => {}), 1200);
             } else {
-              var msg = (res && (res.error || (res.json && JSON.stringify(res.json)) || res.text)) || 'Upload failed';
-              safeToast(msg, 4000);
+              const msg = res && (res.message || (res.json && JSON.stringify(res.json)) || res.error) || 'Upload failed';
+              _safeToast(msg, 4000);
             }
           } else {
-            safeToast('Upload support not available in this environment', 2600);
+            _safeToast('Upload support not available', 2000);
           }
-        } catch (e) {
-          safeToast('Upload failed', 3000);
-          if (console && console.warn) console.warn('overview upload failed', e);
+        } catch (err) {
+          _safeToast('Upload failed', 2500);
+          _log('overview upload error', err);
         }
       }, { passive: true });
-      el.__overviewBound = true;
+      input.__overviewBound = true;
     });
   }
 
-  // Public refresh handler
-  async function refresh(limit) {
-    await populatePreview(typeof limit === 'number' ? limit : 5);
-  }
-
-  // Init on DOM ready
-  function init() {
-    // kick off dashboard refresh if available
-    if (sti.dashboard && typeof sti.dashboard.refresh === 'function') {
-      try { sti.dashboard.refresh(); } catch (e) { if (console && console.warn) console.warn('dashboard.refresh error', e); }
+  // ---------- Public refresh (safe) ----------
+  async function refresh(limit = api._config.PREVIEW_LIMIT) {
+    document.dispatchEvent(new CustomEvent('sti:overview:refresh:start', { detail: { limit } }));
+    try {
+      const sessions = await populatePreview(limit);
+      return !!sessions;
+    } catch (err) {
+      _log('refresh error', err);
+      return false;
     }
-    wireQuickUpload();
-    populatePreview(5).catch(function (e) { if (console && console.warn) console.warn('populatePreview error', e); });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  // ---------- Initialization ----------
+  function init(opts = {}) {
+    // idempotent init
+    if (init.__done) return;
+    init.__done = true;
 
-  // Expose API
-  sti.overview.populatePreview = populatePreview;
-  sti.overview.refresh = refresh;
-  sti.overview.init = init;
+    // apply opts/configure if provided
+    if (opts && typeof opts === 'object') api.configure(opts);
+
+    // attempt to reuse dashboard refresh if present (non-blocking)
+    try {
+      if (sti.dashboard && typeof sti.dashboard.refresh === 'function') {
+        try { sti.dashboard.refresh(); } catch (e) { _log('dashboard.refresh error', e); }
+      }
+    } catch (e) { /* ignore */ }
+
+    // wire quick upload and populate preview
+    wireQuickUpload();
+    // best-effort populate
+    populatePreview(api._config.PREVIEW_LIMIT).catch(err => { _log('initial populatePreview error', err); });
+
+    document.dispatchEvent(new CustomEvent('sti:overview:ready', { detail: { config: api._config } }));
+  }
+
+  // ---------- Configuration & test hooks ----------
+  api.configure = function configure(cfg = {}) {
+    if (!cfg || typeof cfg !== 'object') return;
+    if (cfg.SESSIONS_ENDPOINT) api._config.SESSIONS_ENDPOINT = cfg.SESSIONS_ENDPOINT;
+    if (Number.isFinite(cfg.FETCH_TIMEOUT_MS)) api._config.FETCH_TIMEOUT_MS = cfg.FETCH_TIMEOUT_MS;
+    if (Number.isFinite(cfg.PREVIEW_LIMIT)) api._config.PREVIEW_LIMIT = cfg.PREVIEW_LIMIT;
+    if (Number.isFinite(cfg.RETRY_ATTEMPTS)) api._config.RETRY_ATTEMPTS = cfg.RETRY_ATTEMPTS;
+    if (Number.isFinite(cfg.RETRY_BASE_DELAY_MS)) api._config.RETRY_BASE_DELAY_MS = cfg.RETRY_BASE_DELAY_MS;
+    if (cfg.SELECTORS && typeof cfg.SELECTORS === 'object') api._config.SELECTORS = Object.assign({}, api._config.SELECTORS, cfg.SELECTORS);
+    if (Array.isArray(cfg.DEMO_DATA)) api._config.DEMO_DATA = cfg.DEMO_DATA.slice();
+    return api._config;
+  };
+
+  api.setFetch = function (fn) { api._fetchOverride = fn; };
+  api.setAbortController = function (Ctor) { api._AbortControllerOverride = Ctor; };
+  api.populatePreview = populatePreview;
+  api.refresh = refresh;
+  api.init = init;
+
+  // auto-init on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
 })();

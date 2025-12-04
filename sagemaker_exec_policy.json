@@ -1,0 +1,32 @@
+{
+  "Version":"2012-10-17",
+  "Statement":[
+    {
+      "Sid":"S3ModelAccess",
+      "Effect":"Allow",
+      "Action":["s3:GetObject","s3:ListBucket"],
+      "Resource":[
+        "arn:aws:s3:::speech-to-insights-models-sri",
+        "arn:aws:s3:::speech-to-insights-models-sri/*"
+      ]
+    },
+    {
+      "Sid":"CloudWatchLogs",
+      "Effect":"Allow",
+      "Action":["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents","logs:DescribeLogStreams"],
+      "Resource":"arn:aws:logs:us-east-2:300042230173:*"
+    },
+    {
+      "Sid":"ECRRead",
+      "Effect":"Allow",
+      "Action":["ecr:GetDownloadUrlForLayer","ecr:BatchGetImage","ecr:BatchCheckLayerAvailability"],
+      "Resource":"arn:aws:ecr:us-east-2:300042230173:repository/my-whisper-repo"
+    },
+    {
+      "Sid":"KMSIfNeeded",
+      "Effect":"Allow",
+      "Action":["kms:Decrypt","kms:GenerateDataKey"],
+      "Resource":"*"
+    }
+  ]
+}

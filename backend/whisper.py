@@ -47,16 +47,17 @@ except Exception:
     _BOTO3_AVAILABLE = False
 
 logger = logging.getLogger("whisper")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 if not logger.handlers:
     ch = logging.StreamHandler()
     ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(ch)
 
 # --- Lazy boto clients (module-level cached) --------------------------------
-_sagemaker_runtime = None
-_sagemaker = None
-_s3 = None
+_sagemaker_runtime: Optional[Any] = None
+_sagemaker: Optional[Any] = None
+_s3: Optional[Any] = None
 
 
 def boto_client(name: str, **kwargs):
@@ -179,7 +180,10 @@ def retry_on_exception(
                 except exceptions as e:
                     last_exc = e
                     if logger_fn:
-                        logger_fn(f"Attempt {attempt} failed with {e}; retrying in {delay}s")
+                        try:
+                            logger_fn(f"Attempt {attempt} failed with {e}; retrying in {delay}s")
+                        except Exception:
+                            logger.debug("Logger function failed while reporting retry message")
                     else:
                         logger.debug("Attempt %d failed for %s: %s", attempt, getattr(f, "__name__", f), e)
                     if attempt == tries:
@@ -193,7 +197,7 @@ def retry_on_exception(
 
 
 # ------------------------- S3 helpers ---------------------------------------
-@retry_on_exception((ClientError, ), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
+@retry_on_exception((ClientError,), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
 def download_s3_to_bytes(bucket: str, key: str) -> bytes:
     s3 = boto_client("s3")
     logger.info("Downloading s3://%s/%s", bucket, key)
@@ -205,7 +209,7 @@ def download_s3_to_bytes(bucket: str, key: str) -> bytes:
         raise
 
 
-@retry_on_exception((ClientError, ), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
+@retry_on_exception((ClientError,), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
 def upload_bytes_to_s3(data: bytes, bucket: str, key: str, content_type: Optional[str] = None) -> str:
     s3 = boto_client("s3")
     logger.info("Uploading result to s3://%s/%s", bucket, key)
@@ -220,7 +224,7 @@ def upload_bytes_to_s3(data: bytes, bucket: str, key: str, content_type: Optiona
         raise
 
 
-@retry_on_exception((ClientError, ), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
+@retry_on_exception((ClientError,), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
 def list_s3_prefix(bucket: str, prefix: str, max_keys: int = 1000) -> List[Dict[str, Any]]:
     s3 = boto_client("s3")
     logger.debug("Listing s3://%s/%s", bucket, prefix)
@@ -233,7 +237,7 @@ def list_s3_prefix(bucket: str, prefix: str, max_keys: int = 1000) -> List[Dict[
 
 
 # ------------------------- Real-time inference ------------------------------
-@retry_on_exception((ClientError, ), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
+@retry_on_exception((ClientError,), tries=3, initial_delay=0.5, backoff=2.0, max_delay=5.0, logger_fn=lambda m: logger.debug(m))
 def transcribe_bytes_realtime(audio_bytes: bytes, content_type: Optional[str] = None) -> Dict:
     """
     Call SageMaker realtime endpoint with raw audio bytes.
@@ -292,7 +296,7 @@ def _make_transform_job_name(prefix: Optional[str] = None) -> str:
     return f"{base}-transform-{int(time.time())}-{uuid.uuid4().hex[:6]}"
 
 
-@retry_on_exception((ClientError, ), tries=2, initial_delay=1.0, backoff=2.0, max_delay=8.0, logger_fn=lambda m: logger.debug(m))
+@retry_on_exception((ClientError,), tries=2, initial_delay=1.0, backoff=2.0, max_delay=8.0, logger_fn=lambda m: logger.debug(m))
 def start_sagemaker_transform(
     s3_input_uri: str,
     output_s3_uri: str,
@@ -364,7 +368,7 @@ def wait_for_transform(
             resp = sm.describe_transform_job(TransformJobName=job_name)
         except ClientError as e:
             logger.exception("describe_transform_job failed for %s: %s", job_name, e)
-            # treat as transient and retry
+            # treat as transient and retry after delay
             resp = {}
         status = resp.get("TransformJobStatus")
         logger.info("Transform %s status=%s", job_name, status)
@@ -375,8 +379,9 @@ def wait_for_transform(
         # exponential backoff with jitter
         attempt += 1
         delay = min(max_backoff, poll_interval * (2 ** (attempt - 1)))
-        # add a small jitter
-        delay = delay * (0.8 + 0.4 * (uuid.uuid4().int % 100) / 100.0)
+        # add a small jitter (0.8 - 1.2)
+        jitter = 0.8 + 0.4 * ((uuid.uuid4().int % 100) / 100.0)
+        delay = delay * jitter
         logger.debug("Sleeping %0.1fs before next transform poll (attempt=%d)", delay, attempt)
         time.sleep(delay)
 
@@ -391,7 +396,7 @@ def _read_transform_outputs_from_s3(output_s3_uri: str, job_name_hint: Optional[
     bucket, prefix = parse_s3_uri(out_uri)
     # list objects under prefix
     objs = list_s3_prefix(bucket, prefix)
-    results = []
+    results: List[Dict[str, Any]] = []
     count = 0
     for o in objs:
         key = o.get("Key")
@@ -415,7 +420,7 @@ def _read_transform_outputs_from_s3(output_s3_uri: str, job_name_hint: Optional[
                     first = txt.splitlines()[0].strip()
                     parsed = json.loads(first)
                 except Exception:
-                    parsed = txt
+                    parsed = raw.decode("utf-8", errors="replace")
             results.append({"s3_key": key, "content": parsed})
             count += 1
         except Exception:
@@ -475,7 +480,7 @@ def process_s3_event_and_transcribe(record: Dict, use_realtime_threshold: Option
     s3_input = f"s3://{bucket}/{key}"
     logger.info("Choosing batch transform path for %s -> output %s", s3_input, output_uri)
     job = start_sagemaker_transform(s3_input, output_uri)
-    result = {
+    result: Dict[str, Any] = {
         "source_s3": s3_input,
         "mode": "transform",
         "transform_job": job,

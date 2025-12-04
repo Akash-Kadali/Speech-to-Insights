@@ -1,5 +1,4 @@
 # backend/transcribe.py
-
 """
 Orchestration layer for ingestion -> preprocessing -> transcription.
 
@@ -50,14 +49,15 @@ except Exception:
     whisper_module = None  # type: ignore
 
 logger = logging.getLogger("transcribe")
-logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
+_log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, _log_level_name, logging.INFO))
 if not logger.handlers:
     ch = logging.StreamHandler()
     ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(ch)
 
 # Lazy S3 client
-_s3_client = None
+_s3_client = None  # type: Optional[Any]
 
 
 def _get_s3_client():
@@ -100,8 +100,12 @@ def parse_s3_uri(uri: str) -> Tuple[str, str]:
 
 def ffmpeg_available() -> bool:
     """Return True if ffmpeg binary is available on PATH."""
+    # prefer shutil.which check (faster, no subprocess)
+    if shutil.which("ffmpeg"):
+        return True
+    # final fallback: try calling with --version but suppress output
     try:
-        subprocess.check_call(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         return True
     except Exception:
         return False
@@ -123,19 +127,24 @@ def run_ffmpeg_normalize(input_path: str, output_path: str, sample_rate: int = 1
         "ffmpeg",
         "-y",  # overwrite
         "-hide_banner",
-        "-loglevel", "error",
-        "-i", input_path,
-        "-ar", str(sample_rate),
-        "-ac", "1",
-        "-acodec", "pcm_s16le",
+        "-loglevel",
+        "error",
+        "-i",
+        input_path,
+        "-ar",
+        str(sample_rate),
+        "-ac",
+        "1",
+        "-acodec",
+        "pcm_s16le",
         output_path,
     ]
     logger.debug("Running ffmpeg: %s", " ".join(cmd))
     try:
-        subprocess.check_call(cmd)
+        subprocess.run(cmd, check=True)
     except subprocess.CalledProcessError as e:
         logger.exception("ffmpeg normalization failed for %s -> %s", input_path, output_path)
-        raise RuntimeError(f"ffmpeg failed: {e}")
+        raise RuntimeError(f"ffmpeg failed (rc={getattr(e, 'returncode', 'unknown')}): {e}") from e
 
 
 def split_audio_by_seconds(input_wav: str, seconds: int, out_dir: str) -> List[str]:
@@ -154,33 +163,45 @@ def split_audio_by_seconds(input_wav: str, seconds: int, out_dir: str) -> List[s
         "ffmpeg",
         "-y",
         "-hide_banner",
-        "-loglevel", "error",
-        "-i", input_wav,
-        "-f", "segment",
-        "-segment_time", str(seconds),
-        "-c", "copy",
+        "-loglevel",
+        "error",
+        "-i",
+        input_wav,
+        "-f",
+        "segment",
+        "-segment_time",
+        str(seconds),
+        "-c",
+        "copy",
         base_template,
     ]
     logger.debug("Splitting audio with ffmpeg: %s", " ".join(cmd))
     try:
-        subprocess.check_call(cmd)
-    except subprocess.CalledProcessError:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
         logger.exception("ffmpeg segmenting failed for %s", input_wav)
-        raise RuntimeError("ffmpeg segmenting failed")
+        raise RuntimeError("ffmpeg segmenting failed") from e
 
     chunks = sorted([str(p) for p in out_dir_path.glob("chunk-*.wav")])
     logger.info("Created %d chunks under %s", len(chunks), out_dir)
     return chunks
 
 
-def upload_file_to_s3(local_path: str, bucket: str, key: str) -> str:
+def upload_file_to_s3(local_path: str, bucket: str, key: str, content_type: Optional[str] = None) -> str:
     """
     Upload local_path to s3://bucket/key and return s3://... URI on success.
     """
     logger.info("Uploading %s -> s3://%s/%s", local_path, bucket, key)
     s3 = _get_s3_client()
     try:
-        s3.upload_file(local_path, bucket, key)
+        extra_args = {}
+        if content_type:
+            extra_args["ContentType"] = content_type
+        # use upload_file (multipart-friendly)
+        if extra_args:
+            s3.upload_file(local_path, bucket, key, ExtraArgs=extra_args)
+        else:
+            s3.upload_file(local_path, bucket, key)
     except ClientError as e:
         logger.exception("S3 upload failed: %s", e)
         raise
@@ -233,7 +254,11 @@ def transcribe_local_file(
 
         # Determine size and thresholds
         file_size = Path(normalized).stat().st_size
-        threshold = realtime_threshold_bytes or getattr(whisper_module, "MAX_REALTIME_BYTES", None) or (5 * 1024 * 1024)
+        threshold = (
+            realtime_threshold_bytes
+            or (getattr(whisper_module, "MAX_REALTIME_BYTES", None) if whisper_module else None)
+            or (5 * 1024 * 1024)
+        )
         logger.info("Normalized file size %d bytes, realtime threshold %d bytes", file_size, threshold)
 
         # If splitting requested
@@ -248,9 +273,10 @@ def transcribe_local_file(
             if s3_output_bucket:
                 s3_inputs: List[str] = []
                 for cp in chunk_paths:
-                    key_prefix = (s3_output_prefix.rstrip("/") + "/") if s3_output_prefix else ""
-                    s3_key = f"{key_prefix}inputs/{Path(cp).name}"
-                    s3_uri = upload_file_to_s3(cp, s3_output_bucket, s3_key)
+                    prefix = (s3_output_prefix.rstrip("/") + "/") if s3_output_prefix else ""
+                    s3_key = f"{prefix}inputs/{Path(cp).name}"
+                    ct = mimetypes.guess_type(cp)[0]
+                    s3_uri = upload_file_to_s3(cp, s3_output_bucket, s3_key, content_type=ct)
                     s3_inputs.append(s3_uri)
 
                 result: Dict[str, Any] = {"mode": "uploaded_chunks", "s3_inputs": s3_inputs, "num_chunks": len(s3_inputs)}
@@ -286,7 +312,8 @@ def transcribe_local_file(
 
         prefix = (s3_output_prefix.rstrip("/") + "/") if s3_output_prefix else ""
         s3_key = f"{prefix}inputs/{Path(normalized).name}"
-        s3_uri = upload_file_to_s3(normalized, s3_output_bucket, s3_key)
+        ct = mimetypes.guess_type(normalized)[0]
+        s3_uri = upload_file_to_s3(normalized, s3_output_bucket, s3_key, content_type=ct)
         logger.info("Uploaded normalized file to %s", s3_uri)
 
         # Create a fake S3 record and either call whisper.process_s3_event_and_transcribe

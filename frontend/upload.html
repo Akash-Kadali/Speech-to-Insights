@@ -2,65 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Speech to Insights | Upload</title>
+  <title>Speech to Insights — Upload</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Upload meetings to Speech to Insights — demo frontend for MSML 650 term project." />
   <meta name="author" content="Sri Akash Kadali" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (absolute paths from site root) -->
-  <link rel="stylesheet" href="/css/base.css" />
+  <!-- Preload critical CSS for faster first paint -->
+  <link rel="preload" href="/css/base.css" as="style">
+  <link rel="preload" href="/css/app.css" as="style">
+
+  <!-- Canonical styles (base.css holds tokens) -->
+  <link id="theme-link" rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/components.css" />
   <link rel="stylesheet" href="/css/animations.css" />
   <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Social preview -->
+  <meta property="og:title" content="Speech to Insights — Upload" />
+  <meta property="og:description" content="Upload audio or transcripts and process meetings into searchable insights." />
+  <meta name="twitter:card" content="summary" />
 </head>
 <body>
-  <!-- Accessibility skip link -->
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+  <aside id="site-sidebar" class="sidebar" role="navigation" aria-label="Primary navigation">
     <div class="brand" aria-hidden="false">
       <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h2>Upload</h2>
-        <p>Ingest new meetings.</p>
+        <h2 class="brand-heading">Upload</h2>
+        <p class="brand-sub muted">Ingest new meetings</p>
       </div>
     </div>
 
-    <nav class="vnav" aria-label="Site links">
-      <a href="/index.html">Overview</a>
-      <a href="/upload.html" class="active" aria-current="page">Upload</a>
-      <a href="/search.html">Search</a>
-      <a href="/sessions.html">Sessions</a>
-      <a href="/analytics.html">Analytics</a>
-      <a href="/profile.html">Profile</a>
-      <a href="/admin.html">Admin</a>
-      <a href="/help.html">Help</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="primary-nav" aria-label="Toggle navigation">
+      Menu
+    </button>
+
+    <nav id="primary-nav" class="vnav" aria-label="Site links" role="navigation">
+      <ul>
+        <li><a href="/index.html">Overview</a></li>
+        <li><a href="/upload.html" class="active" aria-current="page">Upload</a></li>
+        <li><a href="/search.html">Search</a></li>
+        <li><a href="/sessions.html">Sessions</a></li>
+        <li><a href="/analytics.html">Analytics</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/credits.html">Credits</a></li>
+      </ul>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
-      Toggle Theme
-    </button>
+    <div class="sidebar-controls">
+      <button id="theme-toggle" class="btn btn-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+        Toggle theme
+      </button>
+
+      <div id="backend-status" class="backend-status" aria-live="polite" aria-atomic="true" title="Backend connection status">
+        <span class="status-dot" aria-hidden="true" data-state="unknown"></span>
+        <span class="status-label">Checking backend…</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- MAIN CONSOLE AREA -->
-  <main id="main-content" class="console page-enter" role="main" aria-labelledby="upload-page-title">
-    <div class="main-inner">
+  <!-- MAIN -->
+  <main id="main-content" class="main page-enter" role="main" aria-labelledby="upload-page-title">
+    <div class="main-inner container">
       <header class="page-header">
         <h1 id="upload-page-title" class="page-title">Upload a Meeting</h1>
-        <p class="page-subtitle">
-          Upload an audio file or transcript, and the system will process it into searchable insights.
-        </p>
+        <p class="page-subtitle">Upload an audio file or transcript — the system will process it into searchable insights.</p>
       </header>
 
       <!-- Upload form -->
       <section class="card" aria-labelledby="upload-heading">
         <h2 id="upload-heading" class="visually-hidden">Upload form</h2>
 
-        <form id="upload-form" name="upload-form" novalidate>
+        <form id="upload-form" name="upload-form" novalidate aria-describedby="upload-hint" autocomplete="off">
           <div class="field">
             <label for="meeting-title">Meeting title</label>
             <input
@@ -70,7 +87,6 @@
               placeholder="Sprint Planning – Week 5"
               required
               aria-required="true"
-              autocomplete="off"
             />
           </div>
 
@@ -96,7 +112,7 @@
               required
               aria-required="true"
             />
-            <small id="upload-hint">Supported formats: .mp3, .wav, .m4a, .txt, .pdf</small>
+            <small id="upload-hint" class="muted">Supported: .mp3, .wav, .m4a, .txt, .pdf — max size depends on server config.</small>
           </div>
 
           <div class="field">
@@ -111,11 +127,10 @@
           </div>
 
           <div class="actions">
-            <!-- upload-trigger wired to JS helpers (data-upload-trigger matches input id) -->
-            <button id="upload-trigger" data-upload-trigger="upload-file" class="cta-primary" type="button" aria-label="Upload and process">
+            <button id="upload-trigger" data-upload-trigger="upload-file" class="btn cta-primary" type="button" aria-label="Upload and process">
               Upload &amp; Process
             </button>
-            <button type="reset" class="cta-ghost">Clear</button>
+            <button id="upload-clear" type="reset" class="btn btn-ghost">Clear</button>
           </div>
         </form>
       </section>
@@ -123,9 +138,7 @@
       <!-- Recent uploads -->
       <section class="card" aria-labelledby="recent-heading">
         <h2 id="recent-heading">Recent uploads</h2>
-        <p class="muted">
-          This section shows recent files uploaded in this browser session (demo only).
-        </p>
+        <p class="muted">Recent items from this browser session (demo only).</p>
         <ul id="recent-uploads" class="list subtle" role="list" aria-live="polite" aria-atomic="true">
           <!-- Filled by /js/upload.js or fallback script -->
         </ul>
@@ -134,41 +147,125 @@
   </main>
 
   <!-- FOOTER -->
-  <footer role="contentinfo" class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container">
       <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
     </div>
   </footer>
 
-  <!-- Toast Notification -->
-  <div id="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
+  <!-- Toast -->
+  <div id="toast" class="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
 
-  <!-- Scripts (deferred): toast, main, upload -->
-  <script defer src="/js/toast.js"></script>
+  <!-- Page scripts (deferred). In production bundle these should be combined. -->
   <script defer src="/js/main.js"></script>
   <script defer src="/js/upload.js"></script>
 
-  <!-- Defensive inline script: ensures theme, toast, and upload form work if external scripts are missing -->
+  <!-- Resilient inline bootstrap:
+       - provides window.sti.utils (toast, fetchJson, setTheme)
+       - theme/sidebar toggles
+       - small upload fallback that persists demo records to localStorage
+       - quick health-check for backend status -->
   <script>
     (function () {
       'use strict';
 
-      function ensureToast() {
-        if (typeof window.showToast === 'function') return;
-        window.showToast = function (message, timeout) {
-          try {
-            var toast = document.getElementById('toast');
-            if (!toast) { console.log('TOAST:', message); return; }
-            toast.hidden = false;
-            toast.textContent = String(message || '');
-            toast.classList.add('visible');
-            setTimeout(function () { toast.classList.remove('visible'); toast.hidden = true; }, typeof timeout === 'number' ? timeout : 3000);
-          } catch (e) {
-            try { console.log('TOAST (fallback):', message); } catch (_) {}
+      // minimal namespace and utilities
+      if (!window.sti) window.sti = {};
+      if (!window.sti.utils) {
+        window.sti.utils = {
+          toast: function (message, timeout) {
+            try {
+              var t = document.getElementById('toast');
+              if (!t) { alert(message); return; }
+              t.hidden = false;
+              t.textContent = String(message || '');
+              t.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              clearTimeout(t.__timer);
+              t.__timer = setTimeout(function () { t.classList.remove('visible'); t.hidden = true; }, timeout);
+            } catch (e) { try { alert(message); } catch (e2) {} }
+          },
+
+          fetchJson: function (url, opts, timeoutMs) {
+            timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 10000;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller) opts = Object.assign({ signal: controller.signal }, opts || {});
+            var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+            return fetch(url, opts).then(function (res) {
+              if (timer) clearTimeout(timer);
+              if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+              return res.json ? res.json() : res.text();
+            });
+          },
+
+          setTheme: function (href) {
+            var link = document.getElementById('theme-link');
+            if (!link) return;
+            link.setAttribute('href', href);
+            try { localStorage.setItem('sti-theme', href); } catch (e) {}
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.setAttribute('aria-pressed', String(href.indexOf('dark') !== -1));
           }
         };
       }
 
+      // restore saved theme
+      try {
+        var saved = localStorage.getItem('sti-theme');
+        if (saved) window.sti.utils.setTheme(saved);
+      } catch (e) {}
+
+      // theme toggle wiring
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle && !themeToggle.__stiAttached) {
+        themeToggle.addEventListener('click', function () {
+          var link = document.getElementById('theme-link');
+          if (!link) return;
+          var curr = link.getAttribute('href') || '/css/base.css';
+          var next = curr.indexOf('dark') !== -1 ? '/css/base.css' : '/css/theme-dark.css';
+          window.sti.utils.setTheme(next);
+        });
+        themeToggle.__stiAttached = true;
+      }
+
+      // sidebar toggle wiring
+      var sidebarToggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('site-sidebar');
+      var primaryNav = document.getElementById('primary-nav');
+      if (sidebarToggle && sidebar && primaryNav && !sidebarToggle.__stiAttached) {
+        sidebarToggle.addEventListener('click', function () {
+          var expanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', String(!expanded));
+          sidebar.classList.toggle('collapsed', expanded);
+          primaryNav.hidden = expanded;
+        });
+        sidebarToggle.__stiAttached = true;
+      }
+
+      // backend status helper
+      var statusEl = document.getElementById('backend-status');
+      function setStatus(ok, label) {
+        if (!statusEl) return;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.classList.toggle('error', !ok);
+        var dot = statusEl.querySelector('.status-dot');
+        var lbl = statusEl.querySelector('.status-label');
+        if (dot) dot.setAttribute('data-state', ok ? 'ok' : 'error');
+        if (lbl) lbl.textContent = label || (ok ? 'Backend connected' : 'Demo mode (no backend)');
+      }
+
+      // non-blocking health check
+      try {
+        window.sti.utils.fetchJson('/api/health', {}, 1500).then(function () {
+          setStatus(true, 'Backend connected');
+        }).catch(function () {
+          setStatus(false, 'Demo mode (no backend)');
+        });
+      } catch (e) {
+        setStatus(false, 'Demo mode (no backend)');
+      }
+
+      // Render recent uploads list
       function renderRecent(items) {
         var recentList = document.getElementById('recent-uploads');
         if (!recentList) return;
@@ -183,38 +280,19 @@
         items.forEach(function (it) {
           var li = document.createElement('li');
           var label = it.title || it.filename || 'upload';
-          var date = it.date || it.uploadedAt || '';
+          var date = it.uploadedAt ? new Date(it.uploadedAt).toLocaleString() : (it.date || '');
           li.textContent = label + (date ? (' · ' + date) : '') + (it.tags ? (' · ' + it.tags) : '');
           recentList.appendChild(li);
         });
       }
 
-      function safeInit() {
-        ensureToast();
+      // Wire upload UI fallback: uses window.sti.uploadFile if present, otherwise simulates and stores demo records
+      function wireUpload() {
+        var form = document.getElementById('upload-form');
+        var uploadTrigger = document.getElementById('upload-trigger');
+        var fileInput = document.getElementById('upload-file');
 
-        // Theme toggle fallback + restore persisted preference
-        var themeToggle = document.getElementById('theme-toggle');
-        var themeLink = document.getElementById('theme-link');
-        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
-          themeToggle.addEventListener('click', function () {
-            try {
-              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
-              var isDark = href.indexOf('dark') !== -1;
-              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
-              themeLink.setAttribute('href', next);
-              themeToggle.setAttribute('aria-pressed', String(!isDark));
-              try { localStorage.setItem('sti-theme', next); } catch (e) {}
-            } catch (e) { console.warn('Theme toggle fallback error', e); }
-          }, { passive: true });
-
-          try {
-            var stored = localStorage.getItem('sti-theme');
-            if (stored) themeLink.setAttribute('href', stored);
-          } catch (e) {}
-          themeToggle.__fallbackAttached = true;
-        }
-
-        // Restore recent uploads from localStorage if present
+        // restore recent uploads
         try {
           var stored = localStorage.getItem('sti-recent-uploads');
           if (stored) {
@@ -229,81 +307,74 @@
           renderRecent([]);
         }
 
-        var form = document.getElementById('upload-form');
-        var uploadTrigger = document.getElementById('upload-trigger');
-        var fileInput = document.getElementById('upload-file');
-
         if (uploadTrigger && !uploadTrigger.__bound) {
           uploadTrigger.addEventListener('click', function () {
-            // If upload.js exposes bindUploadForm/uploadFile behavior, prefer that
+            // Prefer real upload API if provided by /js/upload.js
             if (window.sti && typeof window.sti.uploadFile === 'function') {
-              // Basic validation before calling upload helper
               var title = (document.getElementById('meeting-title') || {}).value || '';
               var date = (document.getElementById('meeting-date') || {}).value || '';
               if (!title.trim() || !date) {
-                window.showToast('Please provide title and date.', 2200);
-                return;
+                window.sti.utils.toast('Please provide title and date.', 2200); return;
               }
               if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-                window.showToast('Please choose a file to upload.', 2200);
-                return;
+                window.sti.utils.toast('Please choose a file to upload.', 2200); return;
               }
               uploadTrigger.disabled = true;
-              window.sti.uploadFile(fileInput.files[0], { startWorkflow: true }).then(function (res) {
-                uploadTrigger.disabled = false;
-                if (res && res.ok) {
-                  // persist demo record
-                  try {
-                    var record = { title: title, date: date, tags: (document.getElementById('tags') || {}).value || '', filename: fileInput.files[0].name, uploadedAt: new Date().toISOString() };
-                    var recent = JSON.parse(localStorage.getItem('sti-recent-uploads') || '[]');
-                    recent.unshift(record);
-                    if (recent.length > 10) recent = recent.slice(0,10);
-                    localStorage.setItem('sti-recent-uploads', JSON.stringify(recent));
-                    renderRecent(recent);
-                  } catch (e) {}
-                  window.showToast('Upload succeeded', 1800);
-                  try { form.reset(); } catch (e) {}
-                } else {
-                  window.showToast('Upload failed: ' + ((res && res.error) || 'unknown'), 3000);
-                }
-              }).catch(function (err) {
-                uploadTrigger.disabled = false;
-                console.error('upload helper error', err);
-                window.showToast('Upload error', 3000);
-              });
+              window.sti.uploadFile(fileInput.files[0], { title: title, date: date, tags: (document.getElementById('tags')||{}).value || '' })
+                .then(function (res) {
+                  uploadTrigger.disabled = false;
+                  if (res && res.ok) {
+                    // persist demo record if back-end returns ok
+                    try {
+                      var record = { title: title, date: date, tags: (document.getElementById('tags')||{}).value || '', filename: fileInput.files[0].name, uploadedAt: new Date().toISOString() };
+                      var recent = JSON.parse(localStorage.getItem('sti-recent-uploads') || '[]');
+                      recent.unshift(record);
+                      if (recent.length > 10) recent = recent.slice(0,10);
+                      localStorage.setItem('sti-recent-uploads', JSON.stringify(recent));
+                      renderRecent(recent);
+                    } catch (e) {}
+                    window.sti.utils.toast('Upload succeeded', 1800);
+                    try { form.reset(); } catch (e) {}
+                  } else {
+                    window.sti.utils.toast('Upload failed', 3000);
+                  }
+                }).catch(function (err) {
+                  uploadTrigger.disabled = false;
+                  console.error('upload error', err);
+                  window.sti.utils.toast('Upload error', 3000);
+                });
               return;
             }
 
-            // fallback demo flow: reuse inline form handling below
-            if (form) form.dispatchEvent(new Event('submit', { cancelable: true }));
+            // Inline fallback simulation
+            if (!form) return;
+            form.dispatchEvent(new Event('submit', { cancelable: true }));
           }, { passive: true });
           uploadTrigger.__bound = true;
         }
 
-        // Inline fallback submit handler (used when upload.js isn't available)
+        // Form fallback submit logic
         if (form && !form.__handled) {
           form.addEventListener('submit', function (e) {
-            // If triggered programmatically by uploadTrigger, e.isTrusted may be false — still handle
             if (e && e.preventDefault) e.preventDefault();
-
             var title = (document.getElementById('meeting-title') || {}).value || '';
             var date = (document.getElementById('meeting-date') || {}).value || '';
             var tags = (document.getElementById('tags') || {}).value || '';
             var fileEl = document.getElementById('upload-file');
 
             if (!title.trim() || !date || !fileEl || !fileEl.files || fileEl.files.length === 0) {
-              window.showToast('Please provide title, date, and a file to upload.', 2500);
+              window.sti.utils.toast('Please provide title, date, and a file to upload.', 2500);
               return;
             }
 
             var file = fileEl.files[0];
-            var allowed = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp4', 'audio/m4a', 'text/plain', 'application/pdf'];
-            var okType = allowed.indexOf(file.type) !== -1 || /\.(mp3|wav|m4a|txt|pdf)$/i.test(file.name);
+            var okType = /\.(mp3|wav|m4a|txt|pdf)$/i.test(file.name) || !!file.type && /audio|text|pdf/i.test(file.type);
             if (!okType) {
-              window.showToast('Unsupported file type. Supported: .mp3, .wav, .m4a, .txt, .pdf', 3000);
+              window.sti.utils.toast('Unsupported file type. Supported: .mp3, .wav, .m4a, .txt, .pdf', 3000);
               return;
             }
 
+            // Persist demo record
             try {
               var record = { title: title.trim(), date: date, tags: tags.trim(), filename: file.name, uploadedAt: new Date().toISOString() };
               var recent = JSON.parse(localStorage.getItem('sti-recent-uploads') || '[]');
@@ -311,18 +382,17 @@
               if (recent.length > 10) recent = recent.slice(0,10);
               localStorage.setItem('sti-recent-uploads', JSON.stringify(recent));
               renderRecent(recent);
-
-              window.showToast('File accepted and queued (demo).', 2200);
+              window.sti.utils.toast('File accepted and queued (demo).', 2200);
               try { form.reset(); } catch (err) {}
             } catch (err) {
               console.error('Fallback upload error', err);
-              window.showToast('Upload failed (demo)', 2000);
+              window.sti.utils.toast('Upload failed (demo)', 2000);
             }
           });
           form.__handled = true;
         }
 
-        // Ensure placeholder exists if nothing rendered
+        // Ensure placeholder when empty
         var recentList = document.getElementById('recent-uploads');
         if (recentList && recentList.children.length === 0) {
           var placeholder = document.createElement('li');
@@ -332,17 +402,23 @@
         }
       }
 
+      // init
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', safeInit);
+        document.addEventListener('DOMContentLoaded', function () { wireUpload(); });
       } else {
-        safeInit();
+        wireUpload();
       }
+
+      // expose small helpers
+      window.sti.setStatus = setStatus;
+      window.sti.toast = window.sti.utils.toast;
+      window.sti.renderRecent = renderRecent;
     })();
   </script>
 
   <noscript>
     <div class="noscript-notice" role="status">
-      JavaScript is disabled in your browser. Uploads and recent items require JavaScript.
+      JavaScript is disabled. Uploads and recent items require JavaScript.
     </div>
   </noscript>
 </body>

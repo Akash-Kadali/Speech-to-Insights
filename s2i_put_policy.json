@@ -1,0 +1,27 @@
+﻿{
+    "Version":  "2012-10-17",
+    "Statement":  [
+                      {
+                          "Effect":  "Allow",
+                          "Sid":  "AllowListBucket",
+                          "Resource":  [
+                                           "arn:aws:s3:::speech-to-insights-sriak-2025-12-02-02"
+                                       ],
+                          "Action":  [
+                                         "s3:ListBucket"
+                                     ]
+                      },
+                      {
+                          "Effect":  "Allow",
+                          "Sid":  "AllowPutGetDeleteInInputsPrefix",
+                          "Resource":  [
+                                           "arn:aws:s3:::speech-to-insights-sriak-2025-12-02-02/inputs/*"
+                                       ],
+                          "Action":  [
+                                         "s3:PutObject",
+                                         "s3:GetObject",
+                                         "s3:DeleteObject"
+                                     ]
+                      }
+                  ]
+}

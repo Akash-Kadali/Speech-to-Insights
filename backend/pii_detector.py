@@ -13,7 +13,6 @@ Features:
     - detect_pii_batch(texts: Iterable[str]) -> List[dict]
 - Defensive: no network calls unless explicitly enabled; falls back to local regex/spaCy.
 """
-
 from __future__ import annotations
 
 import os
@@ -35,6 +34,7 @@ if not logger.handlers:
 try:
     import boto3  # type: ignore
     from botocore.exceptions import BotoCoreError, ClientError  # type: ignore
+
     _boto3_available = True
 except Exception:
     boto3 = None  # type: ignore
@@ -42,6 +42,7 @@ except Exception:
 
 try:
     import spacy  # type: ignore
+
     _spacy_available = True
 except Exception:
     spacy = None  # type: ignore
@@ -73,7 +74,7 @@ if _spacy_available:
 # Conservative regex list. Each item: (label, compiled_re, confidence_estimate)
 _REGEX_PATTERNS: List[Tuple[str, re.Pattern, float]] = [
     ("EMAIL", re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"), 0.95),
-    # phone-ish (permissive)
+    # phone-ish (permissive, will be filtered/merged later)
     ("PHONE", re.compile(r"(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)?\d{3,4}[-.\s]?\d{3,4}"), 0.70),
     ("SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), 0.98),
     # credit-card like (very permissive — redact carefully)

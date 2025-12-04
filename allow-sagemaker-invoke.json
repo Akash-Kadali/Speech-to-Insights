@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowInvokeSpecificEndpoint",
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:InvokeEndpoint",
+        "sagemaker:DescribeEndpoint"
+      ],
+      "Resource": "arn:aws:sagemaker:us-east-2:300042230173:endpoint/jumpstart-dft-hf-asr-whisper-base-20251203-074532"
+    }
+  ]
+}

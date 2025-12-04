@@ -1,258 +1,386 @@
-// profile.js — demo profile persistence (localStorage)
-// Final corrected: defensive, configurable, exposes API, optional backend sync.
+/**
+ * profile.js — upgraded profile persistence (localStorage + optional backend)
+ * - Defensive, configurable, async/await, exposes stable window.stiProfile API
+ * - Optional best-effort server sync; non-blocking and logged
+ * - Test hooks: setFetch, setAbortController
+ * - Emits CustomEvents for integration: sti:profile:restored, sti:profile:saved, sti:profile:cleared
+ */
 (function () {
   'use strict';
 
-  // Namespace
-  var api = window.stiProfile || (window.stiProfile = {});
-  var STORAGE_KEY = (window.STI && window.STI.PROFILE_STORAGE_KEY) || window.STI_PROFILE_STORAGE_KEY || 'sti-profile';
-  var PROFILE_ENDPOINT = (window.STI && window.STI.PROFILE_ENDPOINT) || window.STI_PROFILE_ENDPOINT || null;
-  var FETCH_TIMEOUT_MS = (window.STI && window.STI.FETCH_TIMEOUT_MS) || 3000;
-
-  // Normalize endpoint if array provided
-  if (Array.isArray(PROFILE_ENDPOINT)) PROFILE_ENDPOINT = PROFILE_ENDPOINT[0];
-
-  // Simple email validator
-  function isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
-  }
-
-  // Toast helper (uses global showToast if available; falls back safely)
-  function safeToast(msg, timeout) {
-    if (typeof window.showToast === 'function') {
-      try { window.showToast(msg, timeout); return; } catch (e) { /* fallthrough */ }
+  // ---------- Namespace & default config ----------
+  const api = (window.stiProfile = window.stiProfile || {});
+  const DEFAULTS = {
+    STORAGE_KEY: (window.STI && window.STI.PROFILE_STORAGE_KEY) || window.STI_PROFILE_STORAGE_KEY || 'sti-profile',
+    PROFILE_ENDPOINT: (window.STI && window.STI.PROFILE_ENDPOINT) || window.STI_PROFILE_ENDPOINT || null,
+    FETCH_TIMEOUT_MS: (window.STI && window.STI.FETCH_TIMEOUT_MS) || 3000,
+    SELECTORS: {
+      form: '#profile-form',
+      name: '#display-name',
+      email: '#email',
+      range: '#default-range',
+      updates: '#email-updates',
+      clearBtn: '#profile-clear',
+      toast: '#toast'
     }
+  };
+
+  // apply runtime overrides
+  api._config = Object.assign({}, DEFAULTS);
+
+  // Test / platform hooks
+  api._fetchOverride = null;
+  api._AbortControllerOverride = null;
+
+  // ---------- Small utilities ----------
+  function _now() { return new Date().toISOString(); }
+  function _log(...args) { if (typeof console !== 'undefined') console.debug('stiProfile:', ...args); }
+  function _safeText(s) { return (s === undefined || s === null) ? '' : String(s); }
+
+  function _toast(msg, timeout) {
     try {
-      var t = document.getElementById('toast');
-      if (t) {
-        t.textContent = msg;
-        t.classList.add('visible');
-        timeout = typeof timeout === 'number' ? timeout : 3000;
-        setTimeout(function () { t.classList.remove('visible'); }, timeout);
+      if (typeof window.showToast === 'function') {
+        window.showToast(String(msg || ''), timeout);
         return;
       }
     } catch (e) { /* ignore */ }
-    // last-resort
-    try { if (console && console.info) console.info('Toast:', msg); } catch (e) {}
+
+    const sel = api._config.SELECTORS.toast;
+    try {
+      const t = document.querySelector(sel);
+      if (t) {
+        t.textContent = String(msg || '');
+        t.classList.add('visible');
+        const ms = typeof timeout === 'number' ? timeout : 3000;
+        setTimeout(() => t.classList.remove('visible'), ms);
+        return;
+      }
+    } catch (e) { /* ignore */ }
+
+    if (typeof console !== 'undefined') console.info('TOAST:', msg);
   }
 
-  // Helper: try parse JSON safely
-  function _tryParseJson(text) {
+  function _isValidEmail(email) {
+    // reasonable client-side check (not RFC-perfect)
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+  }
+
+  function _tryParseJSON(text) {
+    if (text === undefined || text === null) return null;
+    if (typeof text === 'object') return text;
     try { return JSON.parse(text); } catch (e) { return null; }
   }
 
-  // Helper: fetch JSON with timeout (returns parsed JSON or throws)
-  function fetchJsonWithTimeout(url, opts, timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : FETCH_TIMEOUT_MS;
-    var controller = new AbortController();
-    var id = setTimeout(function () { controller.abort(); }, timeoutMs);
-    opts = opts || {};
-    opts.credentials = opts.credentials || 'same-origin';
-    opts.signal = controller.signal;
-    return fetch(url, opts)
-      .then(function (res) {
-        clearTimeout(id);
-        if (!res.ok) {
-          var err = new Error('Network response not ok: ' + res.status);
-          err.status = res.status;
-          throw err;
-        }
-        return res.text().then(function (txt) {
-          var p = _tryParseJson(txt);
-          return p !== null ? p : null;
-        });
-      })
-      .finally(function () { clearTimeout(id); });
-  }
+  // ---------- network helper (async + timeout) ----------
+  async function fetchJsonWithTimeout(url, opts = {}, timeoutMs = api._config.FETCH_TIMEOUT_MS) {
+    if (!url) throw new Error('fetchJsonWithTimeout: url required');
 
-  // Save settings handler (can be bound to form submit)
-  async function saveSettings(ev) {
-    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+    const fetchFn = api._fetchOverride || window.fetch;
+    if (typeof fetchFn !== 'function') throw new Error('fetch is not available');
 
-    var nameEl = document.getElementById('display-name') || {};
-    var emailEl = document.getElementById('email') || {};
-    var rangeEl = document.getElementById('default-range') || {};
-    var updatesEl = document.getElementById('email-updates') || {};
+    const AbortCtor = api._AbortControllerOverride || window.AbortController;
+    const controller = AbortCtor ? new AbortCtor() : null;
+    const merged = Object.assign({}, opts);
+    if (controller) merged.signal = controller.signal;
+    merged.credentials = merged.credentials || 'same-origin';
 
-    var name = String(nameEl.value || '').trim();
-    var email = String(emailEl.value || '').trim();
-    var range = rangeEl.value || (rangeEl.dataset && rangeEl.dataset.default) || '30d';
-    var updates = !!(updatesEl.checked || updatesEl.value === 'on');
-
-    if (!name) {
-      safeToast('Please enter a display name.', 2200);
-      return false;
-    }
-    if (!email) {
-      safeToast('Please enter an email address.', 2200);
-      return false;
-    }
-    if (!isValidEmail(email)) {
-      safeToast('Please enter a valid email address.', 2200);
-      return false;
-    }
-
-    var settings = {
-      displayName: name,
-      email: email,
-      defaultRange: range,
-      emailUpdates: updates,
-      savedAt: new Date().toISOString()
-    };
-
-    // Persist locally
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      safeToast('Settings saved locally', 1400);
-    } catch (e) {
-      if (console && console.warn) console.warn('profile: local persist failed', e);
-      safeToast('Failed to save settings locally', 1800);
-    }
-
-    // Optional: try to sync to backend if endpoint configured (best-effort, non-blocking)
-    if (PROFILE_ENDPOINT) {
-      try {
-        fetchJsonWithTimeout(PROFILE_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(settings)
-        }, FETCH_TIMEOUT_MS).then(function (resp) {
-          if (resp && (resp.success || resp.ok || !resp.error)) {
-            safeToast('Settings synced to server', 1400);
-            try { if (window.STI && typeof window.STI.onProfileSync === 'function') window.STI.onProfileSync(resp); } catch (e) {}
-          }
-        }).catch(function (err) {
-          if (console && console.info) console.info('profile: server sync failed', err && err.message ? err.message : err);
-        });
-      } catch (err) {
-        if (console && console.info) console.info('profile: server sync threw', err);
+      const res = await fetchFn(url, merged);
+      const text = await (res.text ? res.text().catch(() => '') : Promise.resolve(''));
+      if (!res.ok) {
+        const parsed = _tryParseJSON(text);
+        const err = new Error(`Network error: ${res.status}`);
+        err.status = res.status;
+        err.body = parsed !== null ? parsed : text;
+        throw err;
       }
+      // prefer JSON if possible, else try first non-empty line (jsonl), else return raw text
+      const parsed = _tryParseJSON(text);
+      if (parsed !== null) return parsed;
+      const first = (text || '').split(/\r?\n/).find(Boolean) || '';
+      const firstParsed = _tryParseJSON(first);
+      if (firstParsed !== null) return firstParsed;
+      return text;
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        const e = new Error('Request aborted/timeout');
+        e.code = 'ABORT';
+        throw e;
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-
-    // Return settings for callers/tests
-    return settings;
   }
 
-  // Restore settings into form fields; if server endpoint provided try to fetch server-side profile first
-  function restoreFromLocal() {
+  // ---------- local persistence helpers ----------
+  function _persistLocal(settings) {
     try {
-      var s = localStorage.getItem(STORAGE_KEY);
-      if (!s) return null;
-      var parsed = JSON.parse(s);
-      if (!parsed || typeof parsed !== 'object') return null;
-
-      var nameEl = document.getElementById('display-name');
-      var emailEl = document.getElementById('email');
-      var rangeEl = document.getElementById('default-range');
-      var updatesEl = document.getElementById('email-updates');
-
-      if (nameEl && parsed.displayName != null) nameEl.value = parsed.displayName;
-      if (emailEl && parsed.email != null) emailEl.value = parsed.email;
-      if (rangeEl && parsed.defaultRange != null) rangeEl.value = parsed.defaultRange;
-      if (updatesEl && typeof parsed.emailUpdates === 'boolean') updatesEl.checked = parsed.emailUpdates;
-
-      return parsed;
+      localStorage.setItem(api._config.STORAGE_KEY, JSON.stringify(settings));
+      return true;
     } catch (e) {
-      if (console && console.warn) console.warn('profile: restore failed', e);
+      _log('persistLocal failed', e);
+      return false;
+    }
+  }
+
+  function _readLocal() {
+    try {
+      const raw = localStorage.getItem(api._config.STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return (parsed && typeof parsed === 'object') ? parsed : null;
+    } catch (e) {
+      _log('readLocal failed', e);
       return null;
     }
   }
 
-  // Try restore from server if endpoint exists; otherwise fall back to local
-  function restore() {
-    if (!PROFILE_ENDPOINT) {
-      return restoreFromLocal();
-    }
-    // best-effort server fetch; if it fails, restore local
-    fetchJsonWithTimeout(PROFILE_ENDPOINT, { method: 'GET' }, FETCH_TIMEOUT_MS)
-      .then(function (resp) {
-        if (resp && typeof resp === 'object') {
-          try {
-            var nameEl = document.getElementById('display-name');
-            var emailEl = document.getElementById('email');
-            var rangeEl = document.getElementById('default-range');
-            var updatesEl = document.getElementById('email-updates');
-            if (nameEl && resp.displayName != null) nameEl.value = resp.displayName;
-            if (emailEl && resp.email != null) emailEl.value = resp.email;
-            if (rangeEl && resp.defaultRange != null) rangeEl.value = resp.defaultRange;
-            if (updatesEl && typeof resp.emailUpdates === 'boolean') updatesEl.checked = resp.emailUpdates;
-            try {
-              // also persist server-backed profile locally for offline use
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(resp));
-            } catch (e) {}
-          } catch (e) {
-            if (console && console.warn) console.warn('profile: apply server response failed', e);
-          }
-        } else {
-          // fallback to local
-          restoreFromLocal();
-        }
-      })
-      .catch(function () {
-        restoreFromLocal();
-      });
-  }
-
-  // Clear settings (both UI + localStorage)
-  function clearSettings(ev) {
-    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+  function _clearLocal() {
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      // clear UI
-      var form = document.getElementById('profile-form');
-      if (form && typeof form.reset === 'function') form.reset();
-      safeToast('Profile cleared', 1200);
-      try { if (window.STI && typeof window.STI.onProfileClear === 'function') window.STI.onProfileClear(); } catch (e) {}
+      localStorage.removeItem(api._config.STORAGE_KEY);
       return true;
     } catch (e) {
-      if (console && console.warn) console.warn('profile: clear failed', e);
-      safeToast('Failed to clear profile', 1600);
+      _log('clearLocal failed', e);
       return false;
     }
   }
 
-  // Initialize: bind form and buttons; restore values
-  function safeInit() {
-    var form = document.getElementById('profile-form');
-    if (form && !form.__handled) {
-      form.addEventListener('submit', saveSettings);
-      form.__handled = true;
+  // ---------- DOM helpers ----------
+  function _sel(idOrSel) {
+    try { return document.querySelector(idOrSel); } catch (e) { return null; }
+  }
+
+  function _getElements() {
+    const s = api._config.SELECTORS;
+    return {
+      form: _sel(s.form),
+      name: _sel(s.name),
+      email: _sel(s.email),
+      range: _sel(s.range),
+      updates: _sel(s.updates),
+      clearBtn: _sel(s.clearBtn)
+    };
+  }
+
+  // ---------- Public actions ----------
+  /**
+   * saveSettings(ev?, opts?)
+   * - validates client-side
+   * - persists locally
+   * - optionally posts to server (non-blocking)
+   * returns saved settings object on success, null on validation failure
+   */
+  async function saveSettings(ev, opts = {}) {
+    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+
+    const { form, name, email, range, updates } = _getElements();
+    const displayName = _safeText(name && name.value).trim();
+    const emailAddr = _safeText(email && email.value).trim();
+    const defaultRange = _safeText(range && range.value) || (range && range.dataset && range.dataset.default) || '';
+    const emailUpdates = !!(updates && (updates.checked === true || String(updates.value).toLowerCase() === 'on'));
+
+    // validation
+    if (!displayName) {
+      _toast('Please enter a display name.', 2200);
+      try { if (name) name.setAttribute('aria-invalid', 'true'); } catch (_) {}
+      return null;
+    }
+    if (!emailAddr) {
+      _toast('Please enter an email address.', 2200);
+      try { if (email) email.setAttribute('aria-invalid', 'true'); } catch (_) {}
+      return null;
+    }
+    if (!_isValidEmail(emailAddr)) {
+      _toast('Please enter a valid email address.', 2200);
+      try { if (email) email.setAttribute('aria-invalid', 'true'); } catch (_) {}
+      return null;
     }
 
-    var clearBtn = document.getElementById('profile-clear');
-    if (clearBtn && !clearBtn.__handled) {
-      clearBtn.addEventListener('click', clearSettings, { passive: true });
-      clearBtn.__handled = true;
+    const settings = {
+      displayName,
+      email: emailAddr,
+      defaultRange,
+      emailUpdates,
+      savedAt: _now()
+    };
+
+    const localOk = _persistLocal(settings);
+    _toast(localOk ? 'Settings saved locally' : 'Settings saved locally (storage warning)', 1400);
+
+    // optional server sync (best-effort, non-blocking)
+    const endpoint = (opts && opts.endpoint) || api._config.PROFILE_ENDPOINT;
+    if (endpoint) {
+      (async () => {
+        try {
+          const resp = await fetchJsonWithTimeout(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+          }, api._config.FETCH_TIMEOUT_MS);
+          _toast('Settings synced to server', 1400);
+          document.dispatchEvent(new CustomEvent('sti:profile:saved', { detail: { settings, serverResp: resp } }));
+          try { if (window.STI && typeof window.STI.onProfileSync === 'function') window.STI.onProfileSync(resp); } catch (_) {}
+        } catch (err) {
+          _log('server sync failed (non-fatal)', err);
+          // do not surface failure to user beyond console; it's demo-safe
+        }
+      })();
+    } else {
+      document.dispatchEvent(new CustomEvent('sti:profile:saved', { detail: { settings } }));
     }
 
-    // Ensure basic required attributes for accessibility
+    // reset aria-invalid attributes
     try {
-      var nameEl = document.getElementById('display-name');
-      var emailEl = document.getElementById('email');
-      if (nameEl) nameEl.setAttribute('required', 'required');
-      if (emailEl) emailEl.setAttribute('required', 'required');
-    } catch (e) { /* ignore */ }
+      if (name) name.removeAttribute('aria-invalid');
+      if (email) email.removeAttribute('aria-invalid');
+    } catch (_) {}
 
-    // Expose API functions
-    api.saveSettings = saveSettings;
-    api.restore = restore;
-    api.clearSettings = clearSettings;
-    api.restoreFromLocal = restoreFromLocal;
-
-    // Run initial restore
-    try { restore(); } catch (e) { /* ignore */ }
+    // return saved settings object
+    return settings;
   }
 
+  /**
+   * restore(opts?)
+   * - try server first if endpoint configured (best-effort)
+   * - fallback to reading local storage synchronously
+   * - returns the applied profile object (local or server) or null
+   */
+  function restore(opts = {}) {
+    const endpoint = (opts && opts.endpoint) || api._config.PROFILE_ENDPOINT;
+
+    // First apply local sync immediately so UI has values synchronously
+    const local = _readLocal();
+    _applyToForm(local);
+
+    // If no endpoint, resolve immediately with local
+    if (!endpoint) {
+      if (local) document.dispatchEvent(new CustomEvent('sti:profile:restored', { detail: { source: 'local', profile: local } }));
+      return local;
+    }
+
+    // Try server async and if it returns, apply and persist locally
+    (async () => {
+      try {
+        const resp = await fetchJsonWithTimeout(endpoint, { method: 'GET' }, api._config.FETCH_TIMEOUT_MS);
+        if (resp && typeof resp === 'object') {
+          _applyToForm(resp);
+          try { _persistLocal(resp); } catch (_) {}
+          document.dispatchEvent(new CustomEvent('sti:profile:restored', { detail: { source: 'server', profile: resp } }));
+          try { if (window.STI && typeof window.STI.onProfileRestore === 'function') window.STI.onProfileRestore(resp); } catch (_) {}
+          return;
+        }
+      } catch (err) {
+        _log('profile server restore failed (falling back to local)', err);
+      }
+      // if server failed, we already applied local above
+      document.dispatchEvent(new CustomEvent('sti:profile:restored', { detail: { source: 'local', profile: local } }));
+    })();
+
+    return local;
+  }
+
+  function _applyToForm(profile) {
+    if (!profile || typeof profile !== 'object') return null;
+    const { name, email, range, updates } = _getElements();
+    try {
+      if (name && profile.displayName != null) name.value = profile.displayName;
+      if (email && profile.email != null) email.value = profile.email;
+      if (range && profile.defaultRange != null) range.value = profile.defaultRange;
+      if (updates && typeof profile.emailUpdates === 'boolean') updates.checked = profile.emailUpdates;
+    } catch (e) {
+      _log('applyToForm failed', e);
+    }
+    return profile;
+  }
+
+  /**
+   * clearSettings(ev?)
+   * - clears local storage and resets form
+   */
+  function clearSettings(ev) {
+    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+    const { form } = _getElements();
+    const ok = _clearLocal();
+    try {
+      if (form && typeof form.reset === 'function') form.reset();
+    } catch (e) { _log('form reset failed', e); }
+    _toast(ok ? 'Profile cleared' : 'Profile cleared (storage warning)', 1200);
+    document.dispatchEvent(new CustomEvent('sti:profile:cleared', { detail: { ok } }));
+    try { if (window.STI && typeof window.STI.onProfileClear === 'function') window.STI.onProfileClear(); } catch (_) {}
+    return ok;
+  }
+
+  // ---------- Initialization / binding ----------
+  function _bindFormHandlers() {
+    const { form, clearBtn, name, email } = _getElements();
+    if (form && !form.__stiBound) {
+      form.addEventListener('submit', function (ev) {
+        const opts = (api && api.submitOptions) || {};
+        saveSettings(ev, opts).catch(err => { _log('saveSettings error', err); });
+      });
+      form.__stiBound = true;
+    }
+
+    if (clearBtn && !clearBtn.__stiBound) {
+      clearBtn.addEventListener('click', clearSettings, { passive: true });
+      clearBtn.__stiBound = true;
+    }
+
+    // set required attributes for accessibility
+    try {
+      if (name && !name.hasAttribute('required')) name.setAttribute('required', 'required');
+      if (email && !email.hasAttribute('required')) email.setAttribute('required', 'required');
+    } catch (_) {}
+  }
+
+  function init() {
+    if (init.__done) return;
+    init.__done = true;
+
+    // apply any externally provided config
+    try {
+      const provided = window.STI || {};
+      if (provided.PROFILE_ENDPOINT) api._config.PROFILE_ENDPOINT = provided.PROFILE_ENDPOINT;
+      if (Number.isFinite(provided.FETCH_TIMEOUT_MS)) api._config.FETCH_TIMEOUT_MS = provided.FETCH_TIMEOUT_MS;
+      if (provided.PROFILE_STORAGE_KEY) api._config.STORAGE_KEY = provided.PROFILE_STORAGE_KEY;
+    } catch (_) {}
+
+    _bindFormHandlers();
+    // restore values (sync local, async server)
+    restore();
+  }
+
+  // auto-init once DOM ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', safeInit);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    safeInit();
+    init();
   }
 
-  // Export stable API
+  // ---------- API exports & test hooks ----------
+  api.saveSettings = saveSettings;
+  api.restore = restore;
+  api.clearSettings = clearSettings;
+  api.readLocal = _readLocal;
+  api.persistLocal = _persistLocal;
+  api.setFetch = function (fn) { api._fetchOverride = fn; };
+  api.setAbortController = function (Ctor) { api._AbortControllerOverride = Ctor; };
+  api.configure = function (cfg = {}) {
+    if (!cfg || typeof cfg !== 'object') return api._config;
+    if (cfg.STORAGE_KEY) api._config.STORAGE_KEY = cfg.STORAGE_KEY;
+    if (cfg.PROFILE_ENDPOINT) api._config.PROFILE_ENDPOINT = cfg.PROFILE_ENDPOINT;
+    if (Number.isFinite(cfg.FETCH_TIMEOUT_MS)) api._config.FETCH_TIMEOUT_MS = cfg.FETCH_TIMEOUT_MS;
+    if (cfg.SELECTORS && typeof cfg.SELECTORS === 'object') api._config.SELECTORS = Object.assign({}, api._config.SELECTORS, cfg.SELECTORS);
+    return api._config;
+  };
+
+  // ensure stable window export
   window.stiProfile = window.stiProfile || {};
-  window.stiProfile.saveSettings = window.stiProfile.saveSettings || saveSettings;
-  window.stiProfile.restore = window.stiProfile.restore || restore;
-  window.stiProfile.clearSettings = window.stiProfile.clearSettings || clearSettings;
+  window.stiProfile.saveSettings = window.stiProfile.saveSettings || api.saveSettings;
+  window.stiProfile.restore = window.stiProfile.restore || api.restore;
+  window.stiProfile.clearSettings = window.stiProfile.clearSettings || api.clearSettings;
   window.stiProfile.api = window.stiProfile.api || api;
+
 })();

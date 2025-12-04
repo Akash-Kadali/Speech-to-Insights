@@ -1,26 +1,17 @@
-# backend/routes.py
 """
 FastAPI routes for the speech_to_insights project.
 
-Upgrades / new features included:
-- POST /upload : accept multipart audio upload, store to S3 input bucket, and either:
-    * kick off background realtime transcription for small files,
-    * return an s3_uri and optionally start a Step Functions execution.
-- POST /start-workflow : start an orchestration run (Step Functions) given an s3_uri or JSON body.
-- GET /health : lightweight health check
-- GET /presign : create a presigned S3 PUT URL for client uploads (supports content_type and expires_in)
-- GET /status/{upload_id} : check for final result.json in OUTPUT_S3_BUCKET
-- Better error handling, logging, size checks, and optional immediate workflow start
-
-Environment variables used:
-- TRANSFORM_INPUT_BUCKET     : required for uploads
-- TRANSFORM_INPUT_PREFIX     : optional prefix in bucket
-- STATE_MACHINE_ARN         : optional Step Functions ARN to start runs
-- OUTPUT_S3_BUCKET          : optional output bucket for results
-- MAX_REALTIME_BYTES        : optional override for realtime threshold (bytes)
-- LOG_LEVEL                 : logging level
+Upgrades / features:
+- POST /upload : accept multipart audio upload, store to S3 input bucket (or delegate to handlers),
+  optionally kick off realtime transcription or start Step Functions.
+- POST /start-workflow : start an orchestration run (Step Functions) given an s3_uri.
+- GET  /health : lightweight health check.
+- GET  /presign : create a presigned S3 PUT URL for client uploads (supports content_type and expires_in).
+- GET  /status/{upload_id} : check for final result.json in OUTPUT_S3_BUCKET.
+- GET  /sessions : list processed sessions (reads OUTPUT_S3_BUCKET when available).
+- GET  /admin/queue : list recent input uploads / processing queue (reads S3_INPUT_BUCKET when available).
+- Defensive error handling, size checks, and optional immediate workflow start.
 """
-
 from __future__ import annotations
 
 import io
@@ -29,11 +20,10 @@ import uuid
 import json
 import time
 import logging
-from typing import Optional
+from typing import Optional, List, Dict
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Query, Body
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 
 # boto3 import defensively (some test environments may not have it)
 try:
@@ -49,12 +39,12 @@ except Exception:
 try:
     from . import handlers  # central upload / s3 / workflow helpers
 except Exception:
-    handlers = None
+    handlers = None  # type: ignore
 
 try:
     from . import step_fn_handlers as sf_handlers  # optional lower-level stepfn helper
 except Exception:
-    sf_handlers = None
+    sf_handlers = None  # type: ignore
 
 logger = logging.getLogger("routes")
 _log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -72,6 +62,8 @@ if _allow_origins.strip() == "" or _allow_origins.strip() == "*":
     allow_origins = ["*"]
 else:
     allow_origins = [o.strip() for o in _allow_origins.split(",") if o.strip()]
+
+from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -153,13 +145,18 @@ async def upload_audio(
     if handlers and getattr(handlers, "handle_upload_fileobj", None):
         try:
             bio = io.BytesIO(body)
-            res = handlers.handle_upload_fileobj(
-                fileobj=bio,
-                filename=filename,
-                start_workflow=bool(start_workflow),
-                presign=False,
-                content_type=content_type,
-            )
+            kwargs = {
+                "fileobj": bio,
+                "filename": filename,
+                "start_workflow": bool(start_workflow),
+                "presign": False,
+                "content_type": content_type,
+            }
+            # Some handlers use a positional signature; be defensive
+            try:
+                res = handlers.handle_upload_fileobj(**kwargs)
+            except TypeError:
+                res = handlers.handle_upload_fileobj(bio, filename, bool(start_workflow), False, content_type)
             status_code = 202 if res.get("ok", True) else 500
             return JSONResponse(status_code=status_code, content=res)
         except HTTPException:
@@ -178,7 +175,7 @@ async def upload_audio(
         s3 = _get_s3_client()
         bio = io.BytesIO(body)
         extra_args = {"ContentType": content_type} if content_type else {}
-        # boto3 upload_fileobj won't accept empty dict for ExtraArgs in some versions, so pass conditionally
+        # boto3 upload_fileobj signature: upload_fileobj(Fileobj, Bucket, Key, ExtraArgs=...)
         if extra_args:
             s3.upload_fileobj(Fileobj=bio, Bucket=S3_INPUT_BUCKET, Key=key, ExtraArgs=extra_args)
         else:
@@ -195,20 +192,20 @@ async def upload_audio(
         }
     except ClientError as e:
         logger.exception("S3 upload failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="S3 upload failed")
     except Exception as exc:
         logger.exception("Unexpected upload error: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
-    # If configured, start workflow (best-effort)
-    if start_workflow and sf_handlers and STATE_MACHINE_ARN and getattr(sf_handlers, "start_state_machine_execution", None):
+    # If configured, start workflow (best-effort) in background
+    if start_workflow and getattr(handlers, "start_workflow_for_s3_uri", None):
         try:
-            exec_resp = sf_handlers.start_state_machine_execution({"audio_s3_uri": s3_uri, "run_id": run_id})
-            result["status"] = "workflow_started"
-            result["execution"] = exec_resp
+            # handlers.start_workflow_for_s3_uri may be sync; run in background to avoid blocking request
+            background_tasks.add_task(handlers.start_workflow_for_s3_uri, s3_uri, run_id)
+            result["status"] = "workflow_started_background"
         except Exception:
-            logger.exception("Failed starting state machine; returning upload info")
-            result["note"] = "workflow_start_failed"
+            logger.exception("Failed scheduling workflow start; returning upload info")
+            result["note"] = "workflow_start_schedule_failed"
 
     return JSONResponse(status_code=202, content=result)
 
@@ -219,20 +216,25 @@ def presign_put(filename: str, content_type: Optional[str] = None, expires_in: i
     Provide a presigned PUT URL clients can use to upload directly to S3.
     Returns JSON with 'url', 's3_uri', and 'upload_id'.
     """
-    if handlers and getattr(handlers, "handle_upload_fileobj", None):
-        try:
-            res = handlers.handle_upload_fileobj(
-                fileobj=None,
-                filename=filename,
-                presign=True,
-                content_type=content_type,
-                expires_in=expires_in,
-            )
-            return JSONResponse(status_code=200, content=res)
-        except Exception as exc:
-            logger.exception("Presign via handlers failed: %s", exc)
-            raise HTTPException(status_code=500, detail=str(exc))
+    # Prefer handler-provided presign helper if present
+    if handlers:
+        # try a few common helper names defensively
+        for helper_name in ("generate_presigned_put", "_generate_presigned_put", "generate_presign_put"):
+            helper = getattr(handlers, helper_name, None)
+            if callable(helper):
+                try:
+                    # many handler helpers expect (bucket, key, expires_in, content_type) or (filename,...)
+                    try:
+                        presign = helper(filename=filename, content_type=content_type, expires_in=expires_in)
+                    except TypeError:
+                        # try alternate signature: (filename, content_type, expires_in)
+                        presign = helper(filename, content_type, expires_in)
+                    return JSONResponse(status_code=200, content={"ok": True, "result": presign})
+                except Exception:
+                    logger.exception("handlers.%s failed; falling back to boto3", helper_name)
+                    break
 
+    # Fallback: generate presigned URL directly using boto3
     if not S3_INPUT_BUCKET:
         raise HTTPException(status_code=500, detail="Server not configured with TRANSFORM_INPUT_BUCKET")
 
@@ -244,20 +246,20 @@ def presign_put(filename: str, content_type: Optional[str] = None, expires_in: i
         if content_type:
             params["ContentType"] = content_type
         url = s3.generate_presigned_url(ClientMethod="put_object", Params=params, ExpiresIn=int(expires_in))
-        return JSONResponse(status_code=200, content={"url": url, "s3_uri": f"s3://{S3_INPUT_BUCKET}/{key}", "upload_id": run_id})
-    except ClientError as e:
-        logger.exception("Failed generating presigned url: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as exc:
-        logger.exception("Failed generating presigned url: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        return JSONResponse(status_code=200, content={"ok": True, "url": url, "s3_uri": f"s3://{S3_INPUT_BUCKET}/{key}", "upload_id": run_id})
+    except ClientError:
+        logger.exception("Failed generating presigned url")
+        raise HTTPException(status_code=500, detail="Failed generating presigned URL")
+    except Exception:
+        logger.exception("Failed generating presigned url")
+        raise HTTPException(status_code=500, detail="Failed generating presigned URL")
 
 
 @app.post("/start-workflow")
 def start_workflow(body: dict = Body(...)):
     """
     Start Step Functions workflow given a JSON body like {"s3_uri": "..."} or {"audio_s3_uri": "..."}.
-    Returns the execution ARN and startDate.
+    Returns the execution ARN and startDate (or handler response).
     """
     if not STATE_MACHINE_ARN:
         raise HTTPException(status_code=400, detail="STATE_MACHINE_ARN not configured")
@@ -283,7 +285,7 @@ def start_workflow(body: dict = Body(...)):
 @app.get("/status/{upload_id}")
 def status(upload_id: str):
     """
-    Return a result if final result.json exists in OUTPUT_S3_BUCKET under prefix/run_id/result.json.
+    Return a result if final result.json exists in OUTPUT_S3_BUCKET under prefix/{upload_id}/result.json.
     """
     if handlers and getattr(handlers, "fetch_result_if_exists", None):
         try:
@@ -309,11 +311,15 @@ def status(upload_id: str):
         except Exception:
             return JSONResponse(status_code=200, content={"found": True, "result_raw": body.decode("utf-8", errors="replace")})
     except ClientError as e:
-        code = e.response.get("Error", {}).get("Code", "")
+        code = ""
+        try:
+            code = e.response.get("Error", {}).get("Code", "")
+        except Exception:
+            pass
         if code in ("NoSuchKey", "NoSuchBucket", "404"):
             return JSONResponse(status_code=200, content={"found": False})
         logger.exception("S3 error while fetching status: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed fetching status")
     except Exception as exc:
         logger.exception("Unexpected error fetching status: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
@@ -352,3 +358,101 @@ def health():
     out["step_functions_configured"] = bool(STATE_MACHINE_ARN)
     out["handlers_available"] = handlers is not None
     return JSONResponse(status_code=200, content=out)
+
+
+# -----------------------
+# New: Sessions and Admin Queue endpoints
+# -----------------------
+
+def _list_s3_objects(bucket: str, prefix: str = "", max_keys: int = 50) -> List[Dict]:
+    """Helper to list objects; defensive around boto3 availability."""
+    if not _BOTO3_AVAILABLE:
+        logger.debug("_list_s3_objects: boto3 not available")
+        return []
+    try:
+        s3 = _get_s3_client()
+        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=max_keys)
+        return resp.get("Contents", []) or []
+    except Exception as exc:
+        logger.exception("_list_s3_objects failed: %s", exc)
+        return []
+
+
+@app.get("/sessions")
+def sessions(limit: int = Query(50, ge=1, le=500)):
+    """
+    Return a JSON list of recent processed sessions.
+    If OUTPUT_S3_BUCKET is configured, list objects under OUTPUT_S3_PREFIX and
+    return lightweight metadata for each session (key, last_modified, size, preview).
+    Otherwise return a minimal empty shape.
+    """
+    if OUTPUT_S3_BUCKET and _BOTO3_AVAILABLE:
+        prefix = OUTPUT_S3_PREFIX.rstrip("/") + "/" if OUTPUT_S3_PREFIX else ""
+        objs = _list_s3_objects(OUTPUT_S3_BUCKET, prefix=prefix, max_keys=limit)
+        sessions_list = []
+        for o in objs:
+            key = o.get("Key")
+            if not key:
+                continue
+            # attempt to include a parsed summary if a result.json exists next to the key,
+            # otherwise include metadata only.
+            session_id = key.split("/")[-2] if "/" in key else key
+            sessions_list.append({
+                "id": session_id,
+                "key": key,
+                "last_modified": o.get("LastModified").isoformat() if o.get("LastModified") else None,
+                "size": o.get("Size"),
+            })
+        return JSONResponse(status_code=200, content={"ok": True, "sessions": sessions_list})
+    # If handlers know how to produce a listing, prefer them
+    if handlers and getattr(handlers, "list_sessions", None):
+        try:
+            res = handlers.list_sessions(limit=limit)
+            return JSONResponse(status_code=200, content={"ok": True, "sessions": res})
+        except Exception:
+            logger.exception("handlers.list_sessions failed; falling back to empty list")
+    # fallback: empty
+    return JSONResponse(status_code=200, content={"ok": True, "sessions": []})
+
+
+@app.get("/admin/queue")
+def admin_queue(limit: int = Query(50, ge=1, le=500)):
+    """
+    Return a JSON representation of the current processing queue / recent uploads.
+
+    Strategy:
+    - If handlers provide queue introspection, use it.
+    - Else, list recent objects in S3_INPUT_BUCKET/INPUT_PREFIX and return minimal metadata.
+    """
+    # prefer handler-provided queue introspection
+    if handlers and getattr(handlers, "list_queue", None):
+        try:
+            q = handlers.list_queue(limit=limit)
+            return JSONResponse(status_code=200, content={"ok": True, "queue": q})
+        except Exception:
+            logger.exception("handlers.list_queue failed; falling back to S3 listing")
+
+    # fallback: list S3 input objects
+    if S3_INPUT_BUCKET and _BOTO3_AVAILABLE:
+        prefix = S3_INPUT_PREFIX.rstrip("/") + "/" if S3_INPUT_PREFIX else ""
+        objs = _list_s3_objects(S3_INPUT_BUCKET, prefix=prefix, max_keys=limit)
+        queue = []
+        for o in objs:
+            key = o.get("Key")
+            if not key:
+                continue
+            # extract run_id as the first path segment after prefix (inputs/{run_id}/file.wav)
+            parts = key[len(prefix):].split("/") if key.startswith(prefix) else key.split("/")
+            run_id = parts[0] if parts else key
+            queue.append({
+                "id": run_id,
+                "key": key,
+                "last_modified": o.get("LastModified").isoformat() if o.get("LastModified") else None,
+                "size": o.get("Size"),
+                # processing status can't be inferred reliably from S3; frontend should poll /status/{id}
+                "status": "uploaded"
+            })
+        return JSONResponse(status_code=200, content={"ok": True, "queue": queue})
+
+    # final fallback: empty queue
+    return JSONResponse(status_code=200, content={"ok": True, "queue": []})

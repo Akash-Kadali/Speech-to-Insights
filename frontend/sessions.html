@@ -2,58 +2,75 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Speech to Insights | Sessions</title>
+  <title>Speech to Insights — Sessions</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Browse previously uploaded meetings — filter, inspect, and open session details." />
   <meta name="author" content="Sri Akash Kadali" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (absolute paths from site root) -->
-  <link rel="stylesheet" href="/css/base.css" />
+  <!-- Preload critical CSS for faster paint -->
+  <link rel="preload" href="/css/base.css" as="style">
+  <link rel="preload" href="/css/app.css" as="style">
+
+  <!-- Canonical styles (put design tokens in base.css) -->
+  <link id="theme-link" rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/components.css" />
   <link rel="stylesheet" href="/css/animations.css" />
   <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Social / sharing -->
+  <meta property="og:title" content="Speech to Insights — Sessions" />
+  <meta property="og:description" content="Browse and filter previously uploaded meetings, view transcripts and session details." />
+  <meta name="twitter:card" content="summary" />
 </head>
 <body>
-  <!-- Accessibility skip link -->
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+  <!-- SIDEBAR (collapsible + accessible) -->
+  <aside id="site-sidebar" class="sidebar" role="navigation" aria-label="Primary navigation">
     <div class="brand" aria-hidden="false">
       <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h2>Sessions</h2>
-        <p class="muted">Browse past meetings.</p>
+        <h2 class="brand-heading">Sessions</h2>
+        <p class="brand-sub muted">Browse past meetings</p>
       </div>
     </div>
 
-    <nav class="vnav" aria-label="Site links">
-      <a href="/index.html">Overview</a>
-      <a href="/upload.html">Upload</a>
-      <a href="/search.html">Search</a>
-      <a href="/sessions.html" class="active" aria-current="page">Sessions</a>
-      <a href="/analytics.html">Analytics</a>
-      <a href="/profile.html">Profile</a>
-      <a href="/admin.html">Admin</a>
-      <a href="/help.html">Help</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="primary-nav" aria-label="Toggle navigation">
+      Menu
+    </button>
+
+    <nav id="primary-nav" class="vnav" aria-label="Site links" role="navigation">
+      <ul>
+        <li><a href="/index.html">Overview</a></li>
+        <li><a href="/upload.html">Upload</a></li>
+        <li><a href="/search.html">Search</a></li>
+        <li><a href="/sessions.html" class="active" aria-current="page">Sessions</a></li>
+        <li><a href="/analytics.html">Analytics</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/credits.html">Credits</a></li>
+      </ul>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
-      Toggle Theme
-    </button>
+    <div class="sidebar-controls">
+      <button id="theme-toggle" class="btn btn-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+        Toggle theme
+      </button>
+
+      <div id="backend-status" class="backend-status" aria-live="polite" aria-atomic="true" title="Backend connection status">
+        <span class="status-dot" aria-hidden="true" data-state="unknown"></span>
+        <span class="status-label">Checking backend…</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- MAIN CONSOLE AREA -->
-  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
-    <div class="main-inner">
-
-      <!-- HEADER -->
+  <!-- MAIN -->
+  <main id="main-content" class="main page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner container">
       <header class="page-header">
         <h1 id="page-title" class="page-title">All Sessions</h1>
-        <p class="page-subtitle">View and filter all previously uploaded meetings.</p>
+        <p class="page-subtitle">View and filter previously uploaded meetings.</p>
       </header>
 
       <!-- FILTER BAR -->
@@ -82,7 +99,8 @@
           </div>
 
           <div class="field">
-            <button id="sessions-filter-btn" class="cta-secondary small-btn" type="button" aria-label="Apply session filters">Apply</button>
+            <button id="sessions-filter-btn" class="btn btn-secondary small" type="button" aria-label="Apply session filters">Apply</button>
+            <button id="sessions-clear-btn" class="btn btn-ghost small" type="button" aria-label="Clear session filters">Clear</button>
           </div>
         </div>
       </section>
@@ -99,121 +117,237 @@
                 <th scope="col">Date</th>
                 <th scope="col">Duration</th>
                 <th scope="col">Tags</th>
-                <th scope="col" aria-hidden="true">Actions</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
 
             <tbody id="sessions-table-body">
-              <!-- Filled dynamically by /js/sessions.js -->
+              <!-- Populated by /js/sessions.js or the fallback below -->
             </tbody>
           </table>
         </div>
-      </section>
 
+        <div id="sessions-empty-hint" class="muted small visually-hidden" aria-live="polite">
+          No sessions found. Upload a meeting to get started.
+        </div>
+      </section>
     </div>
   </main>
 
-  <!-- FOOTER -->
-  <footer role="contentinfo" class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container">
       <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
     </div>
   </footer>
 
-  <!-- Toast -->
-  <div id="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
+  <!-- Toast container -->
+  <div id="toast" class="toast" aria-live="assertive" aria-atomic="true" role="status" hidden></div>
 
-  <!-- Scripts (deferred): toast, main site behavior, sessions logic -->
-  <script defer src="/js/toast.js"></script>
+  <!-- Recommended production: single bundle. Current: core utilities + sessions module -->
   <script defer src="/js/main.js"></script>
   <script defer src="/js/sessions.js"></script>
 
-  <!-- Defensive inline script: ensures toast, theme, and a minimal sessions UI when external scripts are missing -->
+  <!-- Small resilient bootstrap (namespaced utilities + simple fallback for sessions & theme) -->
   <script>
     (function () {
       'use strict';
 
-      function ensureToast() {
-        if (typeof window.showToast === 'function') return;
-        window.showToast = function (message, timeout) {
-          try {
-            var toast = document.getElementById('toast');
-            if (!toast) { console.log('TOAST:', message); return; }
-            toast.hidden = false;
-            toast.textContent = String(message || '');
-            toast.classList.add('visible');
-            setTimeout(function () { toast.classList.remove('visible'); toast.hidden = true; }, typeof timeout === 'number' ? timeout : 3000);
-          } catch (e) {
-            try { console.log('TOAST (fallback):', message); } catch (_) {}
+      // Minimal namespace and shared utilities
+      if (!window.sti) window.sti = {};
+      if (!window.sti.utils) {
+        window.sti.utils = {
+          toast: function (message, timeout) {
+            try {
+              var t = document.getElementById('toast');
+              if (!t) { console.log('TOAST:', message); return; }
+              t.hidden = false;
+              t.textContent = String(message || '');
+              t.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              clearTimeout(t.__timer);
+              t.__timer = setTimeout(function () { t.classList.remove('visible'); t.hidden = true; }, timeout);
+            } catch (e) { try { console.log('TOAST (fallback):', message); } catch (_) {} }
+          },
+
+          fetchJson: function (url, opts, timeoutMs) {
+            timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 8000;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller) opts = Object.assign({ signal: controller.signal }, opts || {});
+            var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+            return fetch(url, opts).then(function (res) {
+              if (timer) clearTimeout(timer);
+              if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+              return res.json ? res.json() : res.text();
+            });
+          },
+
+          setTheme: function (href) {
+            var link = document.getElementById('theme-link');
+            if (!link) return;
+            link.setAttribute('href', href);
+            try { localStorage.setItem('sti-theme', href); } catch (e) {}
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.setAttribute('aria-pressed', String(href.indexOf('dark') !== -1));
           }
         };
       }
 
-      function safeInit() {
-        ensureToast();
+      // restore saved theme if present
+      try {
+        var saved = localStorage.getItem('sti-theme');
+        if (saved) window.sti.utils.setTheme(saved);
+      } catch (e) {}
 
-        // Theme toggle fallback + restore
-        var themeToggle = document.getElementById('theme-toggle');
-        var themeLink = document.getElementById('theme-link');
-        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
-          themeToggle.addEventListener('click', function () {
-            try {
-              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
-              var isDark = href.indexOf('dark') !== -1;
-              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
-              themeLink.setAttribute('href', next);
-              themeToggle.setAttribute('aria-pressed', String(!isDark));
-              try { localStorage.setItem('sti-theme', next); } catch (e) {}
-            } catch (e) { console.warn('Theme toggle fallback error', e); }
-          }, { passive: true });
+      // theme toggle wiring (defensive)
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle && !themeToggle.__stiAttached) {
+        themeToggle.addEventListener('click', function () {
+          var link = document.getElementById('theme-link');
+          if (!link) return;
+          var curr = link.getAttribute('href') || '/css/base.css';
+          var next = curr.indexOf('dark') !== -1 ? '/css/base.css' : '/css/theme-dark.css';
+          window.sti.utils.setTheme(next);
+        });
+        themeToggle.__stiAttached = true;
+      }
 
-          try {
-            var stored = localStorage.getItem('sti-theme');
-            if (stored) themeLink.setAttribute('href', stored);
-          } catch (e) {}
-          themeToggle.__fallbackAttached = true;
-        }
+      // sidebar toggle
+      var sidebarToggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('site-sidebar');
+      var primaryNav = document.getElementById('primary-nav');
+      if (sidebarToggle && sidebar && primaryNav && !sidebarToggle.__stiAttached) {
+        sidebarToggle.addEventListener('click', function () {
+          var expanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', String(!expanded));
+          sidebar.classList.toggle('collapsed', expanded);
+          primaryNav.hidden = expanded;
+        });
+        sidebarToggle.__stiAttached = true;
+      }
 
-        // Sessions table fallback: populate a small placeholder if sessions.js didn't
+      // backend status helper
+      var statusEl = document.getElementById('backend-status');
+      function setStatus(ok, label) {
+        if (!statusEl) return;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.classList.toggle('error', !ok);
+        var dot = statusEl.querySelector('.status-dot');
+        var lbl = statusEl.querySelector('.status-label');
+        if (dot) dot.setAttribute('data-state', ok ? 'ok' : 'error');
+        if (lbl) lbl.textContent = label || (ok ? 'Backend connected' : 'Demo mode (no backend)');
+      }
+
+      // non-blocking health-check
+      try {
+        window.sti.utils.fetchJson('/api/health', {}, 1500).then(function () {
+          setStatus(true, 'Backend connected');
+        }).catch(function () {
+          setStatus(false, 'Demo mode (no backend)');
+        });
+      } catch (e) {
+        setStatus(false, 'Demo mode (no backend)');
+      }
+
+      // Sessions fallback: minimal sample rows and filter wiring if sessions.js didn't attach
+      function renderSessionsPlaceholder() {
         var tbody = document.getElementById('sessions-table-body');
-        try {
-          var hasRows = tbody && tbody.children.length > 0;
-          if (tbody && !hasRows) {
-            var row = document.createElement('tr');
-            var td = document.createElement('td');
-            td.textContent = 'No sessions available (demo placeholder)';
-            td.colSpan = 5;
-            td.className = 'muted';
-            row.appendChild(td);
-            tbody.appendChild(row);
-          }
-        } catch (e) {
-          console.warn('sessions fallback error', e);
-        }
+        if (!tbody) return;
+        tbody.innerHTML = '';
 
-        // Wire the filter "Apply" button to trigger sessions.js filter if provided, otherwise show a demo toast
-        var filterBtn = document.getElementById('sessions-filter-btn');
-        if (filterBtn && !filterBtn.__handled) {
-          filterBtn.addEventListener('click', function () {
+        var sample = [
+          { title: 'team_sync_2025-11-30', date: '2025-11-30', duration: '00:42:15', tags: 'sync,team' },
+          { title: 'roadmap_workshop_2025-11-28', date: '2025-11-28', duration: '01:20:03', tags: 'roadmap,planning' },
+          { title: 'lecture_ml_2025-11-25', date: '2025-11-25', duration: '00:50:10', tags: 'lecture,ml' }
+        ];
+
+        sample.forEach(function (s) {
+          var tr = document.createElement('tr');
+
+          var tdTitle = document.createElement('td');
+          var a = document.createElement('a');
+          a.href = '/sessions/' + encodeURIComponent(s.title) + '.html';
+          a.textContent = s.title;
+          a.className = 'link';
+          tdTitle.appendChild(a);
+          tr.appendChild(tdTitle);
+
+          var tdDate = document.createElement('td'); tdDate.textContent = s.date; tr.appendChild(tdDate);
+          var tdDur = document.createElement('td'); tdDur.textContent = s.duration; tr.appendChild(tdDur);
+          var tdTags = document.createElement('td'); tdTags.textContent = s.tags; tr.appendChild(tdTags);
+
+          var tdActions = document.createElement('td');
+          var viewBtn = document.createElement('button');
+          viewBtn.className = 'btn btn-ghost small';
+          viewBtn.type = 'button';
+          viewBtn.textContent = 'Open';
+          viewBtn.addEventListener('click', function () {
+            window.location.href = a.href;
+          }, { passive: true });
+          tdActions.appendChild(viewBtn);
+          tr.appendChild(tdActions);
+
+          tbody.appendChild(tr);
+        });
+      }
+
+      // Wire filter buttons: prefer exposed applySessionFilters, otherwise fallback
+      function wireFilters() {
+        var applyBtn = document.getElementById('sessions-filter-btn');
+        var clearBtn = document.getElementById('sessions-clear-btn');
+
+        if (applyBtn && !applyBtn.__bound) {
+          applyBtn.addEventListener('click', function () {
             var from = (document.getElementById('sessions-date-from') || {}).value || '';
             var to = (document.getElementById('sessions-date-to') || {}).value || '';
             var tag = (document.getElementById('sessions-tag') || {}).value || '';
 
-            if (typeof window.applySessionFilters === 'function') {
+            if (window.applySessionFilters && typeof window.applySessionFilters === 'function') {
               try {
                 window.applySessionFilters({ dateFrom: from, dateTo: to, tag: tag });
                 return;
               } catch (err) {
                 console.error('applySessionFilters failed', err);
-                window.showToast('Filter failed (check console)', 2000);
+                window.sti.utils.toast('Filter failed (check console)', 2000);
               }
             }
 
-            window.showToast('Filters applied (demo). No backend in demo mode.', 2000);
+            // demo fallback behavior
+            window.sti.utils.toast('Filters applied (demo). No backend in demo mode.', 2000);
           }, { passive: true });
-
-          filterBtn.__handled = true;
+          applyBtn.__bound = true;
         }
+
+        if (clearBtn && !clearBtn.__bound) {
+          clearBtn.addEventListener('click', function () {
+            try {
+              document.getElementById('sessions-date-from').value = '';
+              document.getElementById('sessions-date-to').value = '';
+              document.getElementById('sessions-tag').value = '';
+              window.sti.utils.toast('Filters cleared', 1200);
+              // re-render placeholder or ask real module to refresh
+              if (window.sti && window.sti.sessions && typeof window.sti.sessions.refresh === 'function') {
+                window.sti.sessions.refresh();
+              } else {
+                renderSessionsPlaceholder();
+              }
+            } catch (e) {
+              window.sti.utils.toast('Clear failed', 1200);
+            }
+          }, { passive: true });
+          clearBtn.__bound = true;
+        }
+      }
+
+      // Initialize fallbacks once DOM ready
+      function safeInit() {
+        try {
+          var tbody = document.getElementById('sessions-table-body');
+          if (!tbody || tbody.children.length === 0) renderSessionsPlaceholder();
+        } catch (e) {
+          console.warn('sessions placeholder failed', e);
+        }
+
+        wireFilters();
       }
 
       if (document.readyState === 'loading') {
@@ -221,11 +355,18 @@
       } else {
         safeInit();
       }
+
+      // Expose useful helpers for other modules
+      window.sti.setStatus = setStatus;
+      window.sti.toast = window.sti.utils.toast;
+      window.sti.renderSessionsPlaceholder = renderSessionsPlaceholder;
     })();
   </script>
 
   <noscript>
-    <div class="noscript-notice" role="status">JavaScript is disabled. Sessions list requires JavaScript to populate dynamically.</div>
+    <div class="noscript-notice" role="status">
+      JavaScript is disabled. The sessions list requires JavaScript to populate dynamically.
+    </div>
   </noscript>
 </body>
 </html>

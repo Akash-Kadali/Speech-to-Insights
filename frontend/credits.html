@@ -2,62 +2,75 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Speech to Insights | Credits</title>
+  <title>Speech to Insights — Credits</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Credits and acknowledgements for the Speech to Insights MSML 650 term project." />
-  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="author" content="Sri Akash Kadali" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles -->
-  <link rel="stylesheet" href="/css/base.css" />
+  <!-- Preload critical CSS for faster first paint -->
+  <link rel="preload" href="/css/base.css" as="style">
+  <link rel="preload" href="/css/app.css" as="style">
+
+  <!-- Canonical styles (base.css should hold design tokens) -->
+  <link id="theme-link" rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/components.css" />
   <link rel="stylesheet" href="/css/animations.css" />
   <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Social / sharing -->
+  <meta property="og:title" content="Speech to Insights — Credits" />
+  <meta property="og:description" content="Credits and acknowledgements for the Speech to Insights MSML 650 term project." />
+  <meta name="twitter:card" content="summary" />
 </head>
 <body>
-  <!-- Skip link for accessibility -->
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+  <!-- SIDEBAR (collapsible) -->
+  <aside id="site-sidebar" class="sidebar" role="navigation" aria-label="Primary navigation">
     <div class="brand" aria-hidden="false">
       <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h2>Credits</h2>
-        <p class="muted">Acknowledgements</p>
+        <h2 class="brand-heading">Credits</h2>
+        <p class="brand-sub muted">Acknowledgements</p>
       </div>
     </div>
 
-    <nav class="vnav" aria-label="Site links">
-      <a href="/index.html">Overview</a>
-      <a href="/upload.html">Upload</a>
-      <a href="/search.html">Search</a>
-      <a href="/sessions.html">Sessions</a>
-      <a href="/analytics.html">Analytics</a>
-      <a href="/profile.html">Profile</a>
-      <a href="/admin.html">Admin</a>
-      <a href="/help.html">Help</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
-      <a href="/README.html">README</a>
-      <a href="/credits.html" class="active" aria-current="page">Credits</a>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="primary-nav" aria-label="Toggle navigation">
+      Menu
+    </button>
+
+    <nav id="primary-nav" class="vnav" aria-label="Site links" role="navigation">
+      <ul>
+        <li><a href="/index.html">Overview</a></li>
+        <li><a href="/upload.html">Upload</a></li>
+        <li><a href="/search.html">Search</a></li>
+        <li><a href="/sessions.html">Sessions</a></li>
+        <li><a href="/analytics.html">Analytics</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/credits.html" class="active" aria-current="page">Credits</a></li>
+      </ul>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
-      Toggle Theme
-    </button>
+    <div class="sidebar-controls">
+      <button id="theme-toggle" class="btn btn-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
+        Toggle theme
+      </button>
+
+      <div id="backend-status" class="backend-status" aria-live="polite" aria-atomic="true" title="Backend connection status">
+        <span class="status-dot" aria-hidden="true" data-state="unknown"></span>
+        <span class="status-label">Checking backend…</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- MAIN CONTENT -->
-  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
-    <div class="main-inner">
-
-      <!-- HEADER -->
+  <!-- MAIN -->
+  <main id="main-content" class="main page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner container">
       <header class="page-header">
         <h1 id="page-title" class="page-title">Credits &amp; Acknowledgements</h1>
-        <p class="page-subtitle muted">
-          Special thanks and recognition for contributions to this project.
-        </p>
+        <p class="page-subtitle muted">Special thanks and recognition for contributions to this project.</p>
       </header>
 
       <div class="grid gap-lg">
@@ -66,8 +79,8 @@
           <h2 id="developer-heading">Developer</h2>
           <p>This project was designed and developed by:</p>
           <ul class="list subtle">
-            <li><strong>Karthik (Surya Vamsi Vakada)</strong></li>
-            <li>Graduate Student – MSML Program</li>
+            <li><strong>Sri Akash Kadali</strong></li>
+            <li>Graduate Student — MSML Program</li>
             <li>University of Maryland</li>
           </ul>
         </section>
@@ -76,7 +89,7 @@
         <section class="card" aria-labelledby="course-heading">
           <h2 id="course-heading">Course Information</h2>
           <ul class="list subtle">
-            <li><strong>Course:</strong> MSML 650 – Machine Learning Systems</li>
+            <li><strong>Course:</strong> MSML 650 — Machine Learning Systems</li>
             <li><strong>Program:</strong> Master of Science in Machine Learning</li>
             <li><strong>Institution:</strong> University of Maryland</li>
           </ul>
@@ -88,7 +101,7 @@
           <p>I would like to extend special thanks to:</p>
           <ul class="list subtle">
             <li>MSML 650 instructors for course content and system design guidance</li>
-            <li>Teaching staff for support throughout the term</li>
+            <li>Teaching staff and TAs for support during the term</li>
             <li>Class peers for discussion, testing, and collaboration</li>
           </ul>
         </section>
@@ -96,14 +109,11 @@
         <!-- RESOURCES -->
         <section class="card" aria-labelledby="resources-heading">
           <h2 id="resources-heading">Libraries &amp; Resources</h2>
-          <p class="muted">
-            This frontend project intentionally avoids heavy frameworks. Inspiration and
-            concepts were drawn from:
-          </p>
+          <p class="muted">This frontend intentionally avoids heavy frameworks. Inspiration and concepts include:</p>
           <ul class="list subtle">
             <li>Modern ML system architectures and deployment patterns</li>
             <li>NLP research on embeddings, semantic search, and summarization</li>
-            <li>UI and dashboard design patterns (progressive enhancement)</li>
+            <li>UI and dashboard design patterns emphasizing progressive enhancement</li>
             <li>Browser APIs (Fetch, Canvas, localStorage) for lightweight UX</li>
           </ul>
         </section>
@@ -111,78 +121,124 @@
         <!-- FINAL NOTE -->
         <section class="card" aria-labelledby="final-heading">
           <h2 id="final-heading">Final Note</h2>
-          <p>
-            This project demonstrates end-to-end system thinking, UI design, ML pipeline simulation,
-            and a complete frontend implementation you can run locally. Thank you for reviewing the work.
-          </p>
+          <p>This project demonstrates end-to-end system thinking, UI design, ML pipeline simulation, and a clean frontend implementation you can run locally. Thank you for reviewing the work.</p>
         </section>
       </div>
     </div>
   </main>
 
-  <!-- FOOTER -->
-  <footer role="contentinfo" class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container">
       <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
     </div>
   </footer>
 
-  <!-- Toast -->
-  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+  <!-- Toast container -->
+  <div id="toast" class="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- Scripts -->
-  <script defer src="/js/toast.js"></script>
+  <!-- Recommended single bundle for production: <script defer src="/js/bundle.js"></script> -->
   <script defer src="/js/main.js"></script>
 
-  <!-- Defensive fallback: theme + toast -->
+  <!-- Small resilient bootstrap: shared utils (toast, fetchJson, setTheme), sidebar + theme toggles, and health-check -->
   <script>
     (function () {
-      function safeInit() {
-        // showToast fallback
-        if (typeof window.showToast !== 'function') {
-          window.showToast = function (message, timeout) {
+      if (!window.sti) window.sti = {};
+      if (!window.sti.utils) {
+        window.sti.utils = {
+          toast: function (message, timeout) {
             try {
               var t = document.getElementById('toast');
               if (!t) { alert(message); return; }
               t.textContent = String(message || '');
               t.classList.add('visible');
               timeout = typeof timeout === 'number' ? timeout : 3000;
-              setTimeout(function () { t.classList.remove('visible'); }, timeout);
-            } catch (err) {
-              try { alert(message); } catch (_) {}
-            }
-          };
-        }
+              clearTimeout(t.__timer);
+              t.__timer = setTimeout(function () { t.classList.remove('visible'); }, timeout);
+            } catch (e) { try { alert(message); } catch (e2) {} }
+          },
 
-        // Theme toggle fallback with persistence
-        var toggle = document.getElementById('theme-toggle');
-        var link = document.getElementById('theme-link');
-        if (toggle && link && !toggle.__fallbackAttached) {
-          toggle.addEventListener('click', function () {
-            try {
-              var href = link.getAttribute('href') || '/css/theme-light.css';
-              var isDark = href.indexOf('dark') !== -1;
-              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
-              link.setAttribute('href', next);
-              toggle.setAttribute('aria-pressed', String(!isDark));
-              try { localStorage.setItem('sti-theme', next); } catch (_) {}
-            } catch (e) { console.warn('Theme toggle error', e); }
-          }, { passive: true });
-          toggle.__fallbackAttached = true;
+          fetchJson: function (url, opts, timeoutMs) {
+            timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 8000;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller) opts = Object.assign({ signal: controller.signal }, opts || {});
+            var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+            return fetch(url, opts).then(function (res) {
+              if (timer) clearTimeout(timer);
+              if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+              return res.json ? res.json() : res.text();
+            });
+          },
 
-          // restore persisted theme
-          try {
-            var stored = localStorage.getItem('sti-theme');
-            if (stored) link.setAttribute('href', stored);
-          } catch (_) {}
-        }
+          setTheme: function (href) {
+            var link = document.getElementById('theme-link');
+            if (!link) return;
+            link.setAttribute('href', href);
+            try { localStorage.setItem('sti-theme', href); } catch (e) {}
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.setAttribute('aria-pressed', String(href.indexOf('dark') !== -1));
+          }
+        };
       }
 
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', safeInit);
-      } else {
-        safeInit();
+      // restore saved theme
+      try {
+        var saved = localStorage.getItem('sti-theme');
+        if (saved) window.sti.utils.setTheme(saved);
+      } catch (e) {}
+
+      // theme toggle
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle && !themeToggle.__stiAttached) {
+        themeToggle.addEventListener('click', function () {
+          var link = document.getElementById('theme-link');
+          if (!link) return;
+          var curr = link.getAttribute('href') || '/css/base.css';
+          var next = curr.indexOf('dark') !== -1 ? '/css/base.css' : '/css/theme-dark.css';
+          window.sti.utils.setTheme(next);
+        });
+        themeToggle.__stiAttached = true;
       }
+
+      // sidebar toggle
+      var sidebarToggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('site-sidebar');
+      var primaryNav = document.getElementById('primary-nav');
+      if (sidebarToggle && sidebar && primaryNav && !sidebarToggle.__stiAttached) {
+        sidebarToggle.addEventListener('click', function () {
+          var expanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', String(!expanded));
+          sidebar.classList.toggle('collapsed', expanded);
+          primaryNav.hidden = expanded;
+        });
+        sidebarToggle.__stiAttached = true;
+      }
+
+      // backend status helper
+      var statusEl = document.getElementById('backend-status');
+      function setStatus(ok, label) {
+        if (!statusEl) return;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.classList.toggle('error', !ok);
+        var dot = statusEl.querySelector('.status-dot');
+        var lbl = statusEl.querySelector('.status-label');
+        if (dot) dot.setAttribute('data-state', ok ? 'ok' : 'error');
+        if (lbl) lbl.textContent = label || (ok ? 'Backend connected' : 'Demo mode (no backend)');
+      }
+
+      // health-check (non-blocking)
+      try {
+        window.sti.utils.fetchJson('/api/health', {}, 1500).then(function () {
+          setStatus(true, 'Backend connected');
+        }).catch(function () {
+          setStatus(false, 'Demo mode (no backend)');
+        });
+      } catch (e) {
+        setStatus(false, 'Demo mode (no backend)');
+      }
+
+      // expose helpers
+      window.sti.setStatus = setStatus;
+      window.sti.toast = window.sti.utils.toast;
     })();
   </script>
 

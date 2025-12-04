@@ -2,59 +2,72 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Speech to Insights | Analytics</title>
+  <title>Speech to Insights — Analytics</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Analytics dashboard for Speech to Insights — topic trends, speaker participation, and keyword patterns." />
-  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="author" content="Sri Akash Kadali" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (absolute paths from site root) -->
-  <link rel="stylesheet" href="/css/base.css" />
+  <!-- Preload critical assets -->
+  <link rel="preload" href="/css/base.css" as="style">
+  <link rel="preload" href="/css/app.css" as="style">
+
+  <!-- Canonical styles (tokens live in base.css) -->
+  <link id="theme-link" rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/components.css" />
   <link rel="stylesheet" href="/css/animations.css" />
   <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- Social / sharing -->
+  <meta property="og:title" content="Speech to Insights — Analytics" />
+  <meta property="og:description" content="Topic trends, speaker participation, and keyword patterns across meetings." />
+  <meta name="twitter:card" content="summary" />
 </head>
 <body>
-  <!-- Skip link for keyboard users -->
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+  <!-- SIDEBAR (collapsible) -->
+  <aside id="site-sidebar" class="sidebar" role="navigation" aria-label="Primary navigation">
     <div class="brand" aria-hidden="false">
       <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h2>Analytics</h2>
-        <p class="muted">Trends &amp; patterns</p>
+        <h2 class="brand-heading">Analytics</h2>
+        <p class="brand-sub muted">Trends & patterns</p>
       </div>
     </div>
 
-    <nav class="vnav" aria-label="Site links">
-      <a href="/index.html">Overview</a>
-      <a href="/upload.html">Upload</a>
-      <a href="/search.html">Search</a>
-      <a href="/sessions.html">Sessions</a>
-      <a href="/analytics.html" class="active" aria-current="page">Analytics</a>
-      <a href="/profile.html">Profile</a>
-      <a href="/admin.html">Admin</a>
-      <a href="/help.html">Help</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="primary-nav" aria-label="Toggle navigation">
+      Menu
+    </button>
+
+    <nav id="primary-nav" class="vnav" aria-label="Site links" role="navigation">
+      <ul>
+        <li><a href="/index.html">Overview</a></li>
+        <li><a href="/upload.html">Upload</a></li>
+        <li><a href="/search.html">Search</a></li>
+        <li><a href="/sessions.html">Sessions</a></li>
+        <li><a href="/analytics.html" class="active" aria-current="page">Analytics</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/credits.html">Credits</a></li>
+      </ul>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
-      Toggle Theme
-    </button>
+    <div class="sidebar-controls">
+      <button id="theme-toggle" class="btn btn-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">Toggle theme</button>
+      <div id="backend-status" class="backend-status" aria-live="polite" aria-atomic="true" title="Backend connection status">
+        <span class="status-dot" aria-hidden="true" data-state="unknown"></span>
+        <span class="status-label">Checking backend…</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- MAIN CONSOLE AREA -->
-  <main id="main-content" class="console page-enter" role="main" aria-labelledby="page-title">
-    <div class="main-inner">
-      <!-- HEADER -->
+  <!-- MAIN -->
+  <main id="main-content" class="main page-enter" role="main" aria-labelledby="page-title">
+    <div class="main-inner container">
       <header class="page-header">
         <h1 id="page-title" class="page-title">Analytics Dashboard</h1>
-        <p class="page-subtitle muted">
-          Explore topic trends, speaker participation, and keyword patterns across your meetings.
-        </p>
+        <p class="page-subtitle muted">Explore topic trends, speaker participation, and keyword patterns across your meetings.</p>
       </header>
 
       <!-- FILTERS -->
@@ -73,17 +86,11 @@
 
           <div class="field">
             <label for="analytics-tag">Tag</label>
-            <input
-              type="text"
-              id="analytics-tag"
-              name="analytics-tag"
-              placeholder="roadmap, pricing, Q1 plan"
-              aria-label="Tag filter"
-            />
+            <input type="text" id="analytics-tag" name="analytics-tag" placeholder="roadmap, pricing, Q1 plan" aria-label="Tag filter" />
           </div>
 
           <div class="field">
-            <button id="analytics-refresh" class="cta-secondary small-btn" type="button" aria-label="Refresh analytics">Refresh</button>
+            <button id="analytics-refresh" class="btn btn-secondary small" type="button" aria-label="Refresh analytics">Refresh</button>
           </div>
         </div>
       </section>
@@ -112,144 +119,207 @@
       <section class="card" aria-labelledby="wordcloud-heading">
         <h2 id="wordcloud-heading">Keyword Word Cloud</h2>
         <p class="muted">Most prominent keywords extracted from your conversations.</p>
-        <div id="wordcloud" class="wordcloud" role="region" aria-label="Keyword word cloud">
-          <!-- Filled dynamically by analytics.js; fallback below if script missing -->
+        <div id="wordcloud" class="wordcloud" role="region" aria-label="Keyword word cloud" tabindex="0">
+          <!-- analytics.js fills this; fallback inserted by bootstrap if missing -->
         </div>
       </section>
 
-      <!-- LEGEND / NOTES -->
+      <!-- NOTES -->
       <section class="card" aria-labelledby="notes-heading">
         <h2 id="notes-heading">Notes</h2>
         <ul class="list subtle">
           <li>Charts are placeholders when no backend analytics are available.</li>
-          <li>Analytics endpoint paths can be customized via <code>window.STI</code> config.</li>
+          <li>Analytics endpoints and behavior can be configured via <code>window.STI</code> (see /js/main.js).</li>
         </ul>
       </section>
     </div>
   </main>
 
-  <!-- FOOTER -->
-  <footer role="contentinfo" class="site-footer">
+  <footer class="site-footer" role="contentinfo">
     <div class="container">
       <p>© 2025 Speech to Insights · MSML 650 Term Project</p>
     </div>
   </footer>
 
   <!-- Toast -->
-  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+  <div id="toast" class="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- Page scripts (defer so DOM is available). Include toast, main, analytics -->
-  <script defer src="/js/toast.js"></script>
+  <!-- Production recommendation: use a single bundle for JS. For now we load core utilities + analytics. -->
   <script defer src="/js/main.js"></script>
   <script defer src="/js/analytics.js"></script>
 
-  <!-- Responsive canvas sizing + defensive fallbacks -->
+  <!-- Lightweight resilient bootstrap:
+       - sets small window.sti utils (toast, fetchJson, setTheme)
+       - sizes canvases for crisp rendering
+       - provides fallback rendering when analytics.js is absent or backend is missing
+       - performs a quick health-check against /api/health and updates UI -->
   <script>
     (function () {
-      // Ensure canvases have a crisp drawing buffer matching devicePixelRatio
+      if (!window.sti) window.sti = {};
+      if (!window.sti.utils) {
+        window.sti.utils = {
+          toast: function (message, timeout) {
+            try {
+              var t = document.getElementById('toast');
+              if (!t) { alert(message); return; }
+              t.textContent = message;
+              t.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              clearTimeout(t.__timer);
+              t.__timer = setTimeout(function () { t.classList.remove('visible'); }, timeout);
+            } catch (e) { try { alert(message); } catch (e2) {} }
+          },
+
+          fetchJson: function (url, opts, timeoutMs) {
+            timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 10000;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller) opts = Object.assign({ signal: controller.signal }, opts || {});
+            var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+            return fetch(url, opts).then(function (res) {
+              if (timer) clearTimeout(timer);
+              if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+              return res.json ? res.json() : res.text();
+            });
+          },
+
+          setTheme: function (href) {
+            var link = document.getElementById('theme-link');
+            if (!link) return;
+            link.setAttribute('href', href);
+            try { localStorage.setItem('sti-theme', href); } catch (e) {}
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.setAttribute('aria-pressed', String(href.indexOf('dark') !== -1));
+          }
+        };
+      }
+
+      // restore saved theme if present
+      try {
+        var savedTheme = localStorage.getItem('sti-theme');
+        if (savedTheme) window.sti.utils.setTheme(savedTheme);
+      } catch (e) {}
+
+      // theme toggle wiring
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle && !themeToggle.__stiAttached) {
+        themeToggle.addEventListener('click', function () {
+          var link = document.getElementById('theme-link');
+          if (!link) return;
+          var curr = link.getAttribute('href') || '/css/base.css';
+          var next = curr.indexOf('dark') !== -1 ? '/css/base.css' : '/css/theme-dark.css';
+          window.sti.utils.setTheme(next);
+        });
+        themeToggle.__stiAttached = true;
+      }
+
+      // sidebar toggle
+      var sidebarToggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('site-sidebar');
+      var primaryNav = document.getElementById('primary-nav');
+      if (sidebarToggle && sidebar && primaryNav && !sidebarToggle.__stiAttached) {
+        sidebarToggle.addEventListener('click', function () {
+          var expanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', String(!expanded));
+          sidebar.classList.toggle('collapsed', expanded);
+          primaryNav.hidden = expanded;
+        });
+        sidebarToggle.__stiAttached = true;
+      }
+
+      // canvas sizing helper (keeps drawing buffer crisp)
       function sizeCanvas(id, minW, minH) {
         var c = document.getElementById(id);
         if (!c) return;
         var rect = c.getBoundingClientRect();
         var cssW = Math.max(minW || 320, Math.round(rect.width || 640));
-        var cssH = Math.max(minH || 120, Math.round(rect.height || Math.floor(cssW * 0.4)));
+        var cssH = Math.max(minH || 120, Math.round(rect.height || Math.floor(cssW * 0.45)));
         var ratio = window.devicePixelRatio || 1;
-        // set drawing buffer size
         c.width = Math.floor(cssW * ratio);
         c.height = Math.floor(cssH * ratio);
         c.style.width = cssW + 'px';
         c.style.height = cssH + 'px';
       }
 
+      // placeholder chart renderer
+      function renderPlaceholderChart(canvas, text) {
+        if (!canvas || !canvas.getContext) return;
+        var ctx = canvas.getContext('2d');
+        var ratio = window.devicePixelRatio || 1;
+        // clear and draw in CSS pixel space
+        ctx.save();
+        ctx.scale(ratio, ratio);
+        ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+        ctx.font = '14px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+        ctx.fillStyle = '#6b7280'; // subtle gray
+        ctx.textAlign = 'center';
+        var cssW = parseInt(canvas.style.width, 10) || (canvas.width / ratio);
+        var cssH = parseInt(canvas.style.height, 10) || (canvas.height / ratio);
+        ctx.fillText(text, cssW / 2, cssH / 2);
+        ctx.restore();
+        canvas.__renderedPlaceholder = true;
+      }
+
+      // update backend status small UI
+      var statusEl = document.getElementById('backend-status');
+      function setStatus(ok, label) {
+        if (!statusEl) return;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.classList.toggle('error', !ok);
+        var dot = statusEl.querySelector('.status-dot');
+        var lbl = statusEl.querySelector('.status-label');
+        if (dot) dot.setAttribute('data-state', ok ? 'ok' : 'error');
+        if (lbl) lbl.textContent = label || (ok ? 'Backend connected' : 'Demo mode (no backend)');
+      }
+
       function safeInit() {
-        // size canvases early so analytics.js can draw crisply
+        // size canvases early for crisp drawing
         sizeCanvas('topic-chart', 480, 240);
         sizeCanvas('speaker-chart', 480, 240);
 
-        // showToast fallback
-        if (typeof window.showToast !== 'function') {
-          window.showToast = function (message, timeout) {
-            try {
-              var toast = document.getElementById('toast');
-              if (!toast) { alert(message); return; }
-              toast.textContent = message;
-              toast.classList.add('visible');
-              timeout = typeof timeout === 'number' ? timeout : 3000;
-              setTimeout(function () { toast.classList.remove('visible'); }, timeout);
-            } catch (e) {
-              try { alert(message); } catch (_) {}
-            }
-          };
-        }
-
-        // Theme toggle fallback and restore saved theme
-        var themeToggle = document.getElementById('theme-toggle');
-        var themeLink = document.getElementById('theme-link');
-        if (themeToggle && themeLink && !themeToggle.__fallbackAttached) {
-          themeToggle.addEventListener('click', function () {
-            try {
-              var href = themeLink.getAttribute('href') || '/css/theme-light.css';
-              var isDark = href.indexOf('dark') !== -1;
-              var next = isDark ? '/css/theme-light.css' : '/css/theme-dark.css';
-              themeLink.setAttribute('href', next);
-              themeToggle.setAttribute('aria-pressed', String(!isDark));
-              try { localStorage.setItem('sti-theme', next); } catch (e) {}
-            } catch (e) { console.warn('Theme toggle fallback error', e); }
-          });
-          themeToggle.__fallbackAttached = true;
-        }
+        // quick health-check for backend; non-blocking
         try {
-          var stored = localStorage.getItem('sti-theme');
-          if (stored && themeLink) themeLink.setAttribute('href', stored);
-        } catch (e) {}
+          window.sti.utils.fetchJson('/api/health', {}, 1500).then(function () {
+            setStatus(true, 'Backend connected');
+            // if analytics.js exposes an init that depends on backend, call it
+            if (window.stiAnalytics && typeof window.stiAnalytics.init === 'function') {
+              window.stiAnalytics.init().catch(function () {
+                setStatus(false, 'Analytics init failed (demo)');
+              });
+            }
+          }).catch(function () {
+            setStatus(false, 'Demo mode (no backend)');
+          });
+        } catch (e) {
+          setStatus(false, 'Demo mode (no backend)');
+        }
 
-        // Analytics refresh fallback (no backend)
-        var refreshBtn = document.getElementById('analytics-refresh');
+        // fallback placeholders if analytics.js doesn't render
         var topicCanvas = document.getElementById('topic-chart');
         var speakerCanvas = document.getElementById('speaker-chart');
         var wordcloud = document.getElementById('wordcloud');
+        var refreshBtn = document.getElementById('analytics-refresh');
 
-        function renderPlaceholderChart(canvas, text) {
-          if (!canvas || !canvas.getContext) return;
-          var ctx = canvas.getContext('2d');
-          // adjust for devicePixelRatio used when sizing
-          var ratio = window.devicePixelRatio || 1;
-          ctx.save();
-          ctx.scale(ratio, ratio);
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.font = '16px sans-serif';
-          ctx.fillStyle = '#666';
-          ctx.textAlign = 'center';
-          var cssW = parseInt(canvas.style.width, 10) || (canvas.width / ratio);
-          var cssH = parseInt(canvas.style.height, 10) || (canvas.height / ratio);
-          ctx.fillText(text, cssW / 2, cssH / 2);
-          ctx.restore();
-          canvas.__renderedByAnalytics = true;
-        }
-
-        if (refreshBtn) {
-          if (!refreshBtn.__fallbackAttached) {
-            refreshBtn.addEventListener('click', function () {
-              // If analytics.js provides an API, use it
-              if (window.stiAnalytics && typeof window.stiAnalytics.refresh === 'function') {
-                window.stiAnalytics.refresh().catch(function () {
-                  renderPlaceholderChart(topicCanvas, 'Topic chart — no data');
-                  renderPlaceholderChart(speakerCanvas, 'Speaker chart — no data');
-                });
-              } else {
+        // attach refresh fallback
+        if (refreshBtn && !refreshBtn.__fallbackAttached) {
+          refreshBtn.addEventListener('click', function () {
+            if (window.stiAnalytics && typeof window.stiAnalytics.refresh === 'function') {
+              window.stiAnalytics.refresh().catch(function () {
                 renderPlaceholderChart(topicCanvas, 'Topic chart — no data');
                 renderPlaceholderChart(speakerCanvas, 'Speaker chart — no data');
-                if (wordcloud && wordcloud.children.length === 0) {
-                  wordcloud.innerHTML = '<p class="muted">No keywords to display. Upload sessions to populate analytics.</p>';
-                }
-                window.showToast('Analytics refreshed (placeholder)', 1400);
+              });
+            } else {
+              renderPlaceholderChart(topicCanvas, 'Topic chart — no data');
+              renderPlaceholderChart(speakerCanvas, 'Speaker chart — no data');
+              if (wordcloud && wordcloud.children.length === 0) {
+                wordcloud.innerHTML = '<p class="muted">No keywords to display. Upload sessions to populate analytics.</p>';
               }
-            }, { passive: true });
-            refreshBtn.__fallbackAttached = true;
-          }
+              window.sti.utils.toast('Analytics refreshed (placeholder)', 1200);
+            }
+          }, { passive: true });
+          refreshBtn.__fallbackAttached = true;
         }
 
-        // Ensure placeholders show on initial load if analytics.js didn't draw
+        // if analytics.js didn't render the charts, show placeholders
         if (topicCanvas && !topicCanvas.__renderedByAnalytics) renderPlaceholderChart(topicCanvas, 'Topic chart — loading');
         if (speakerCanvas && !speakerCanvas.__renderedByAnalytics) renderPlaceholderChart(speakerCanvas, 'Speaker chart — loading');
         if (wordcloud && wordcloud.children.length === 0) {
@@ -262,12 +332,17 @@
       } else {
         safeInit();
       }
+
+      // expose helpers for page scripts
+      window.sti.setStatus = setStatus;
+      window.sti.resizeCanvas = sizeCanvas;
+      window.sti.toast = window.sti.utils.toast;
     })();
   </script>
 
   <noscript>
     <div class="noscript-notice" role="status">
-      JavaScript is disabled in your browser. Analytics require JavaScript to render charts.
+      JavaScript is disabled. Analytics require JavaScript to render charts.
     </div>
   </noscript>
 </body>

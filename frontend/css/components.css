@@ -1,282 +1,381 @@
 /* ============================================================
-   HIREX • components.css (v1.1.0 — Unified Neon Component System)
-   ------------------------------------------------------------
-   • Sidebar-ready neon components
-   • Gradient text + glass surfaces
-   • Responsive + accessibility safe
-   Author: Sri Akash Kadali
+   Speech to Insights — components.css (final corrected)
+   • Refined sidebar & component system
+   • Theme-aware, responsive, accessible, and defensive
+   • Compact sidebar: smaller footprint, lower position, scrollable nav
+   • Uses design tokens from base.css; safe fallbacks included
+   Author: upgraded from Sri Akash Kadali originals
    ============================================================ */
 
-/* ========================= SIDEBAR ========================= */
-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 240px;
-  height: 100vh;
-  background: rgba(10,16,32,0.85);
-  backdrop-filter: blur(14px) saturate(160%);
-  border-right: 1px solid var(--surface-2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 1.75rem 0;
-  box-shadow: inset -2px 0 20px rgba(0,0,0,.4), 0 0 22px rgba(110,168,254,.12);
-  z-index: 1000;
-  transition: background .4s var(--ease-out), border-color .4s var(--ease-out);
+/* Small defensive token fallbacks (in case base tokens are missing) */
+:root{
+  /* Compact default sidebar width: reduces horizontal footprint */
+  --sidebar-width: 200px;
+  --radius: 14px;
+  --surface-2: rgba(255,255,255,.10);
+  --surface-1: rgba(255,255,255,.06);
+  --accent: #6ea8fe;
+  --accent-rgb: 110,168,254;
+  --text-100: #fff;
+  --text-400: #b8c1d9;
+  --shadow: 0 12px 36px rgba(0,0,0,.45);
+  --ease-out: cubic-bezier(.16,1,.3,1);
+
+  /* vertical offset so header has breathing room */
+  --sidebar-top-offset: 18px;
+  --sidebar-vertical-gap: 0.6rem;
 }
 
-/* --- Brand --- */
+/* ========================= SIDEBAR / NAV ========================= */
+/* Use aside or nav semantic elements; support both selectors defensively */
+aside.sidebar,
+nav.sidebar,
+nav[role="navigation"] {
+  position: fixed;
+  top: var(--sidebar-top-offset);
+  left: 0;
+  width: var(--sidebar-width);
+  height: calc(100vh - (var(--sidebar-top-offset) + 10px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;            /* left-align brand + nav */
+  gap: var(--sidebar-vertical-gap);
+  padding: 0.6rem 0.6rem;
+  background: rgba(10,16,32,0.86);
+  backdrop-filter: blur(12px) saturate(130%);
+  border-right: 1px solid var(--surface-2);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  box-shadow: inset -2px 0 18px rgba(0,0,0,.36), 0 0 20px rgba(var(--accent-rgb), .06);
+  z-index: 1000;
+  transition: transform .30s var(--ease-out), background .35s var(--ease-out), border-color .28s var(--ease-out);
+  -webkit-font-smoothing: antialiased;
+  will-change: transform, background;
+  overflow: hidden;
+}
+
+/* Brand block: compact row layout (logo + text) and left aligned */
+.sidebar .brand,
+nav.sidebar .brand,
 .nav-left {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: .6rem;
-  margin-bottom: 2rem;
-}
-.nav-left img {
-  height: 70px;
-  width: 70px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.05);
-  padding: .5rem;
-  box-shadow: 0 0 24px rgba(110,168,254,.3);
-}
-.nav-title {
-  font: 800 1.35rem/1 "Poppins", sans-serif;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  background: linear-gradient(90deg,#ffffff,#9f78ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 16px rgba(110,168,254,.25);
-  user-select: none;
-}
-
-/* --- Navigation Links --- */
-nav ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: .9rem;
+  gap: .5rem;
+  padding: 0 .5rem;
   width: 100%;
+  flex: 0 0 auto;
 }
-nav ul a {
+.sidebar .brand img,
+.nav-left img,
+.brand-mark {
+  height: 40px;
+  width: 40px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  padding: .18rem;
+  box-shadow: 0 6px 18px rgba(var(--accent-rgb), .12);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.sidebar .brand .logo-text,
+.nav-title,
+.brand-heading {
+  font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: .95rem;
+  color: var(--text-100);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  line-height: 1;
+}
+.sidebar .brand .brand-sub,
+.brand-sub {
+  font-size: .76rem;
+  color: var(--text-400);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* Optional: small control row under brand for theme toggle / compact actions */
+.sidebar .brand-controls {
+  display:flex;
+  gap:.4rem;
+  padding: 0 .5rem;
+  width: 100%;
+  align-items: center;
+}
+
+/* Vertical nav: full width, scrollable if needed.
+   Use flex:1 so nav takes remaining space and cta/footer stay pinned */
+nav.sidebar ul,
+nav.sidebar .vnav,
+.vnav {
+  list-style: none;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .28rem;
+  flex: 1 1 auto;                      /* grow to fill available height */
+  overflow: auto;                      /* scroll when too tall */
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.5rem;
+}
+
+/* Link styles (compact) */
+nav.sidebar ul a,
+.vnav a,
+nav ul a,
+nav a {
   display: flex;
   align-items: center;
-  gap: .75rem;
-  padding: .65rem 1.25rem;
+  gap: .5rem;
+  padding: .46rem .6rem;
+  margin-inline: .18rem;
+  border-radius: calc(var(--radius) - 6px);
   color: var(--text-400);
-  border-radius: 10px;
-  margin: 0 .75rem;
   text-decoration: none;
-  transition: background .3s var(--ease-out),
-              transform .25s var(--ease-out),
-              color .25s var(--ease-out),
-              box-shadow .25s var(--ease-out);
+  font-weight: 600;
+  font-size: .95rem;
+  transition: background .20s var(--ease-out), transform .14s var(--ease-out), color .16s var(--ease-out), box-shadow .16s var(--ease-out);
+  min-width: 0;
 }
-nav ul a:hover {
-  background: rgba(110,168,254,0.15);
-  color: #fff;
-  transform: translateX(5px);
-  box-shadow: 0 0 12px rgba(110,168,254,.2);
+
+/* Hover / focus (subtle) */
+nav.sidebar ul a:hover,
+.vnav a:hover,
+nav ul a:focus,
+.vnav a:focus{
+  background: rgba(var(--accent-rgb), .10);
+  color: var(--text-100);
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), .05);
+  outline: none;
 }
-nav ul a[aria-current="page"],
-nav ul a.active-link {
-  background: linear-gradient(90deg, rgba(110,168,254,0.25), rgba(110,168,254,0.08));
+
+/* Active / current */
+nav.sidebar ul a[aria-current="page"],
+.vnav a[aria-current="page"],
+nav ul a.active-link,
+.vnav a.active-link {
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), .20), rgba(var(--accent-rgb), .04));
   border-left: 3px solid var(--accent);
-  color: #fff;
-  box-shadow: 0 0 16px rgba(110,168,254,.25);
+  color: var(--text-100);
+  box-shadow: 0 0 14px rgba(var(--accent-rgb), .10);
 }
 
-/* --- Sidebar CTA --- */
+/* Icon placeholder */
+nav ul a .icon,
+.vnav a .icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 7px;
+  color: inherit;
+}
+
+/* Sidebar CTA positioned at bottom: pinned after nav by using flex layout */
+.sidebar .cta-nav-button,
 .cta-nav-button {
-  margin-top: auto;
-  margin-bottom: 1.25rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.6rem;
+  width: calc(100% - 1rem);
   border: none;
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, var(--accent), #9f78ff);
-  color: #fff;
-  padding: .8rem 1.4rem;
+  border-radius: 12px;
+  padding: .6rem .8rem;
   font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #9f78ff);
+  box-shadow: 0 10px 24px rgba(var(--accent-rgb), .12);
   cursor: pointer;
-  transition: transform .25s var(--ease-out), box-shadow .3s var(--ease-out);
+  transition: transform .16s var(--ease-out), box-shadow .18s var(--ease-out), opacity .16s var(--ease-out);
+  flex: 0 0 auto;
 }
+.sidebar .cta-nav-button:hover,
 .cta-nav-button:hover {
-  transform: scale(1.06);
-  box-shadow: 0 0 24px rgba(110,168,254,.55);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 14px 36px rgba(var(--accent-rgb), .18);
 }
 
-/* --- Responsive Sidebar Collapse --- */
+/* Hide CTA on small screens (replace with app-level action) */
 @media (max-width: 860px) {
-  nav {
-    position: fixed;
+  nav.sidebar, nav[role="navigation"], aside.sidebar {
     transform: translateX(-100%);
-    width: 220px;
-    height: 100%;
-    flex-direction: column;
-    transition: transform .35s var(--ease-out);
-    z-index: 999;
+    width: clamp(180px, 70vw, 220px);
+    top: 12px;
+    height: calc(100vh - 22px);
   }
-  body.nav-open nav {
+  body.nav-open nav.sidebar,
+  body.nav-open nav[role="navigation"],
+  body.nav-open aside.sidebar {
     transform: translateX(0);
-    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+    box-shadow: 0 0 40px rgba(0,0,0,.6);
   }
-  nav ul { gap: 1rem; }
   .cta-nav-button { display: none; }
 }
 
 /* ========================= HEADINGS ========================= */
 h1.page-title {
-  font: 800 clamp(1.9rem, 4vw, 2.6rem)/1.1 "Outfit", sans-serif;
+  font-family: "Outfit", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.6rem, 3.6vw, 2.2rem);
   text-align: center;
-  margin-block: 1.25rem .75rem;
+  margin-block: .9rem;
   letter-spacing: -0.02em;
   background: linear-gradient(90deg,#ffffff,#9f78ff);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 22px rgba(110,168,254,.25);
+  text-shadow: 0 6px 18px rgba(var(--accent-rgb), .08);
 }
-h2 {
-  font: 700 clamp(1.1rem,2.2vw,1.5rem)/1.25 "Outfit", sans-serif;
-  color: var(--text-100);
-  margin-block: .35rem .85rem;
-}
+h2 { font-weight: 700; font-size: clamp(1rem, 2vw, 1.3rem); color: var(--text-100); margin-block: .35rem .7rem; }
 
 /* ========================= SECTIONS / CARDS ========================= */
 section, .card {
   background: var(--surface-1);
   border: 1px solid var(--surface-2);
   border-radius: var(--radius);
-  padding: clamp(1rem,2.5vw,2rem);
-  color: var(--text-200);
+  padding: clamp(.8rem, 2vw, 1.2rem);
+  color: var(--text-100);
   box-shadow: var(--shadow);
-  transition: transform .25s var(--ease-out),
-              box-shadow .25s var(--ease-out),
-              border-color .25s var(--ease-out);
+  transition: transform .20s var(--ease-out), box-shadow .20s var(--ease-out), border-color .18s var(--ease-out);
   will-change: transform, box-shadow;
 }
-.card:hover, section:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 20px 50px rgba(0,0,0,.55), 0 0 18px rgba(110,168,254,.25);
-  border-color: rgba(255,255,255,.22);
+.card:hover, section:hover, .card:focus-within, section:focus-within {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 44px rgba(0,0,0,.44), 0 0 14px rgba(var(--accent-rgb), .14);
+  border-color: rgba(255,255,255,.16);
 }
+.card .card-header, .card .card-footer { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
 
 /* ========================= CTA BLOCKS ========================= */
 .cta-container {
   display: flex;
   flex-wrap: wrap;
+  gap: clamp(.5rem, 1.5vw, .9rem);
   align-items: center;
   justify-content: center;
-  gap: clamp(.8rem,2vw,1.5rem);
-  margin-block: 1.25rem 2rem;
+  margin-block: .8rem;
 }
-
 .cta-primary, .cta-secondary, .cta-accent {
-  font: 700 1rem/1 "Outfit", sans-serif;
-  min-inline-size: clamp(200px,28vw,240px);
-  text-align: center;
-  padding: .85rem 1.25rem;
+  min-width: clamp(140px, 20vw, 200px);
+  padding: .65rem .9rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform .14s var(--ease-out), box-shadow .18s var(--ease-out), opacity .14s var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.cta-primary { background: linear-gradient(135deg, var(--accent), #9f78ff); color: #fff; box-shadow: 0 8px 24px rgba(var(--accent-rgb), .12); }
+.cta-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(var(--accent-rgb), .18); }
+.cta-secondary { background: rgba(255,255,255,0.06); color: var(--text-100); }
+.cta-secondary:hover { background: rgba(255,255,255,0.10); box-shadow: 0 8px 22px rgba(var(--accent-rgb), .08); }
+.cta-accent { background: linear-gradient(135deg, rgba(var(--accent-rgb),1), #9f78ff); color: #0a1020; box-shadow: 0 10px 28px rgba(var(--accent-rgb), .14); }
+.cta-accent:hover { transform: scale(1.02); box-shadow: 0 18px 40px rgba(var(--accent-rgb), .22); }
+
+/* ========================= TOAST (component override) ========================= */
+#toast {
+  font: 700 .95rem/1 "Outfit", system-ui, sans-serif;
+  position: fixed;
+  left: 50%;
+  bottom: -120px;
+  transform: translateX(-50%) scale(.98);
+  background: rgba(var(--accent-rgb), .12);
+  color: #fff;
+  padding: .72rem 1.15rem;
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,.18);
-  cursor: pointer;
-  transition: transform .15s var(--ease-elastic),
-              box-shadow .25s var(--ease-out),
-              opacity .25s var(--ease-out);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 36px rgba(0,0,0,.36);
+  transition: bottom .34s var(--ease-out), opacity .34s var(--ease-out), transform .34s var(--ease-out);
+  opacity: 0;
+  z-index: 9999;
 }
-
-/* --- Primary CTA --- */
-.cta-primary {
-  background: linear-gradient(135deg,#6ea8fe,#9f78ff);
-  color: #fff;
-  box-shadow: 0 0 20px rgba(110,168,254,.25);
-}
-.cta-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 36px rgba(110,168,254,.45);
-}
-
-/* --- Secondary CTA --- */
-.cta-secondary {
-  background: rgba(255,255,255,0.08);
-  color: var(--text-100);
-}
-.cta-secondary:hover {
-  background: rgba(255,255,255,0.12);
-  box-shadow: 0 0 24px rgba(110,168,254,.25);
-}
-
-/* --- Accent CTA --- */
-.cta-accent {
-  background: linear-gradient(135deg,var(--accent),#9f78ff);
-  color: #0a1020;
-  font-weight: 700;
-  box-shadow: 0 0 18px rgba(110,168,254,.45);
-}
-.cta-accent:hover {
-  transform: scale(1.03);
-  box-shadow: 0 0 30px rgba(110,168,254,.6);
-}
+#toast.visible { bottom: 28px; opacity: 1; transform: translateX(-50%) scale(1); }
 
 /* ========================= FOOTER ========================= */
 footer {
-  font: 500 .95rem/1.5 "Outfit", sans-serif;
-  color: var(--text-600);
+  padding: 1.05rem;
   text-align: center;
-  padding: 2rem 1rem;
+  color: var(--text-400);
   border-top: 1px solid var(--surface-2);
-  background: rgba(10,16,32,.65);
+  background: rgba(10,16,32, .6);
   backdrop-filter: blur(6px);
-  transition: background .4s var(--ease-out);
 }
-footer a {
-  color: var(--accent);
-  transition: opacity .25s var(--ease-out);
-}
-footer a:hover { opacity: .85; }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { opacity: .9; text-decoration: underline; }
 
-/* ========================= TOAST ========================= */
-#toast {
-  font: 700 .95rem/1 "Outfit", sans-serif;
-  position: fixed;
-  left: 50%;
-  bottom: -100px;
-  transform: translateX(-50%) scale(.95);
-  background: rgba(110,168,254,0.15);
-  color: #fff;
-  padding: .75rem 1.25rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,.25);
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow);
-  opacity: 0;
-  z-index: 9999;
-  transition: opacity .45s var(--ease-out),
-              bottom .45s var(--ease-out),
-              transform .45s var(--ease-out);
-}
-#toast.visible {
-  bottom: 28px;
-  opacity: 1;
-  transform: translateX(-50%) scale(1);
-}
-
-/* ========================= ACCESSIBILITY ========================= */
+/* ========================= ACCESSIBILITY & INTERACTION ========================= */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 .14rem rgba(110,168,254,.65),
-              0 6px 24px rgba(0,0,0,.25);
+  box-shadow: 0 0 0 .12rem rgba(var(--accent-rgb), .32), 0 6px 22px rgba(0,0,0,.20);
+  border-radius: 8px;
+}
+a, button, input, .cta-primary, .cta-secondary, .cta-accent {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Reduced motion override */
+@media (prefers-reduced-motion: reduce) {
+  nav.sidebar, aside.sidebar, .card, .cta-primary, .cta-secondary, .cta-accent, #toast {
+    transition: none !important;
+    animation: none !important;
+  }
 }
 
 /* ========================= SMALL SCREENS ========================= */
 @media (max-width: 560px) {
-  h1.page-title { margin-block-start: .5rem; font-size: 1.8rem; }
-  section { padding: 1rem; }
-  .cta-primary, .cta-secondary, .cta-accent { min-inline-size: 100%; }
-  footer { font-size: .85rem; }
+  nav.sidebar,
+  aside.sidebar { width: clamp(180px, 70vw, 220px); top: 12px; height: calc(100vh - 20px); }
+  .nav-left img { height: 56px; width: 56px; }
+  h1.page-title { margin-block-start: .5rem; font-size: 1.5rem; }
+  section, .card { padding: .75rem; }
+  .cta-primary, .cta-secondary, .cta-accent { min-width: 100%; }
+  footer { font-size: .85rem; padding: .85rem; }
 }
+
+/* small tweak: make sure nav scrollbar matches theme */
+nav.sidebar ::-webkit-scrollbar, .vnav ::-webkit-scrollbar { width: 8px; height: 8px; }
+nav.sidebar ::-webkit-scrollbar-thumb, .vnav ::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.06);
+  border-radius: 8px;
+}
+
+/* ========================= UTILITY / COMPONENT HELPERS ========================= */
+.kv { display:flex; gap:.5rem; align-items:center; }
+.kv .label { color: var(--text-400); font-weight:600; }
+.kv .value { color: var(--text-100); font-weight:700; }
+
+/* ========================= QUICK OVERRIDES TO REDUCE FOOTPRINT (optional toggles)
+   - Add class `compact-sidebar` on <body> to apply extra compaction:
+     e.g. <body class="compact-sidebar"> ... </body>
+   - These rules further shrink paddings, font-sizes and margins for dense UIs.
+   ============================================================ */
+body.compact-sidebar aside.sidebar,
+body.compact-sidebar nav.sidebar {
+  --sidebar-width: 180px;
+  top: 14px;
+  height: calc(100vh - 22px);
+}
+body.compact-sidebar .brand img,
+body.compact-sidebar .brand-mark { height: 36px; width: 36px; }
+body.compact-sidebar .logo-text { font-size: .88rem; }
+body.compact-sidebar .vnav a { padding: .36rem .52rem; font-size: .92rem; gap: .4rem; }
+
+/* ========================= DEVELOPER NOTES =========================
+ - The nav is left-aligned and uses flex:1 + overflow:auto so items remain accessible and the CTA/footer stay pinned.
+ - Toggle the sidebar on small screens by adding/removing the class `nav-open` on <body>.
+ - To change sidebar width, adjust --sidebar-width in :root (or base.css).
+ - For denser UIs, add class `compact-sidebar` on <body> to apply tighter spacing.
+ - This file is defensive — override tokens in base.css or via [data-theme].
+ ============================================================ */

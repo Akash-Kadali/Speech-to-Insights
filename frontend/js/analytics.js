@@ -1,205 +1,285 @@
-// analytics.js — lightweight placeholder charting (no external libs)
-// Final corrected, defensive, and slightly smarter: will try to fetch analytics data
-// from the backend but gracefully falls back to placeholder drawings when needed.
+/**
+ * analytics.js — Upgraded, defensive, configurable analytics drawing (no external libs)
+ *
+ * - Tries multiple backend endpoints, falls back to graceful placeholders.
+ * - Exposes stable window.stiAnalytics API for integration & testing.
+ * - Defensive: tolerant parsing, timeouts, Abort support, and helpful CustomEvents.
+ *
+ * Public API (window.stiAnalytics):
+ *   .refresh() -> Promise resolves to metrics or null
+ *   .getLast() -> last fetched metrics (or null)
+ *   .setEndpoints(array|string) -> replace endpoints used for probing
+ *   ._setFetch(fn) / ._setAbortController(Ctor) -> test hooks
+ *
+ * Design goals: readable, testable, non-destructive to host page, accessible.
+ */
 (function () {
   'use strict';
 
-  // Expose small API so inline fallback can detect analytics is active
-  var api = window.stiAnalytics || (window.stiAnalytics = {});
+  // ---------- configuration ----------
+  const DEFAULT_ENDPOINTS = ['/admin/metrics', '/metrics', '/analytics', '/admin/stats'];
+  const cfg = (window.STI && window.STI.ANALYTICS) || window.STI_ANALYTICS || {};
 
-  // Config (override via window.STI if needed)
-  var METRICS_ENDPOINTS = (window.STI && window.STI.ANALYTICS_ENDPOINTS) || window.STI_ANALYTICS_ENDPOINTS ||
-    ['/admin/metrics', '/metrics', '/analytics', '/admin/stats'];
-  var FETCH_TIMEOUT_MS = (window.STI && window.STI.ANALYTICS_FETCH_TIMEOUT_MS) || 2500;
+  let endpoints = Array.isArray(cfg.ENDPOINTS) ? cfg.ENDPOINTS.slice()
+    : (typeof cfg.ENDPOINTS === 'string' ? [cfg.ENDPOINTS]
+      : (Array.isArray(window.STI_ANALYTICS_ENDPOINTS) ? window.STI_ANALYTICS_ENDPOINTS.slice()
+        : (typeof window.STI_ANALYTICS_ENDPOINTS === 'string' ? [window.STI_ANALYTICS_ENDPOINTS] : DEFAULT_ENDPOINTS.slice())));
 
-  // Normalize endpoints to array
-  if (!Array.isArray(METRICS_ENDPOINTS)) {
-    if (typeof METRICS_ENDPOINTS === 'string') {
-      METRICS_ENDPOINTS = [METRICS_ENDPOINTS];
-    } else {
-      METRICS_ENDPOINTS = ['/admin/metrics', '/metrics', '/analytics', '/admin/stats'];
-    }
-  }
+  const DEFAULT_FETCH_TIMEOUT_MS = (Number.isFinite(cfg.FETCH_TIMEOUT_MS) && cfg.FETCH_TIMEOUT_MS) ||
+    (Number.isFinite(window.STI_ANALYTICS_FETCH_TIMEOUT_MS) && window.STI_ANALYTICS_FETCH_TIMEOUT_MS) ||
+    2500;
 
-  // ---- helpers ----
-  function safeToast(msg, t) {
-    if (typeof window.showToast === 'function') window.showToast(msg, t || 2000);
-    else if (typeof console !== 'undefined') console.info('TOAST:', msg);
-  }
+  const DRAW_CONFIG = Object.assign({ maxWordCloudItems: 40 }, cfg.DRAW || {});
 
+  // ---------- api surface ----------
+  const api = window.stiAnalytics || (window.stiAnalytics = {});
+  api._lastMetrics = null;
+  api._config = { endpoints: endpoints.slice(), FETCH_TIMEOUT_MS: DEFAULT_FETCH_TIMEOUT_MS, DRAW_CONFIG };
+
+  // Platform wrappers (allow overriding for tests)
+  const platform = {
+    fetch: (typeof window.fetch === 'function') ? window.fetch.bind(window) : null,
+    AbortController: (typeof window.AbortController === 'function') ? window.AbortController : null,
+    now: () => Date.now()
+  };
+
+  // Allow test overrides via api._setFetch / _setAbortController
+  api._fetchOverride = null;
+  api._AbortControllerOverride = null;
+
+  // ---------- small utilities ----------
   function _tryParseJson(text) {
-    try { return JSON.parse(text); } catch (e) { return null; }
-  }
-
-  function fetchJsonWithTimeout(url, timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : FETCH_TIMEOUT_MS;
-    var controller = new AbortController();
-    var id = setTimeout(function () { controller.abort(); }, timeoutMs);
-    return fetch(url, { signal: controller.signal, credentials: 'same-origin' })
-      .then(function (res) {
-        clearTimeout(id);
-        if (!res.ok) throw new Error('Network response not ok: ' + res.status);
-        return res.text().then(function (text) {
-          // try straight JSON
-          var parsed = _tryParseJson(text);
-          if (parsed !== null) return parsed;
-          // try first non-empty line (jsonl)
-          var first = (text || '').split(/\r?\n/).find(Boolean) || '';
-          parsed = _tryParseJson(first);
-          if (parsed !== null) return parsed;
-          // fallback: return raw text
-          return text;
-        });
-      })
-      .finally(function () { clearTimeout(id); });
-  }
-
-  async function tryFetchMetrics() {
-    for (var i = 0; i < METRICS_ENDPOINTS.length; i++) {
+    if (text === undefined || text === null) return null;
+    if (typeof text === 'object') return text;
+    try {
+      return JSON.parse(String(text));
+    } catch (e) {
+      // attempt to parse first non-empty line (JSONL)
       try {
-        var ep = METRICS_ENDPOINTS[i];
-        if (!ep) continue;
-        var data = await fetchJsonWithTimeout(ep, FETCH_TIMEOUT_MS);
-        if (data) return data;
-      } catch (e) {
-        // try next endpoint
-        if (typeof console !== 'undefined') console.debug('metrics fetch failed for', METRICS_ENDPOINTS[i], e && e.message ? e.message : e);
+        const first = String(text).split(/\r?\n/).find(Boolean) || '';
+        return first ? JSON.parse(first) : null;
+      } catch (e2) {
+        return null;
       }
     }
-    return null;
   }
 
-  // ---- drawing primitives ----
-  function clearCanvas(canvas) {
+  function _toast(msg, ms = 2000) {
+    try {
+      if (typeof window.showToast === 'function') { window.showToast(msg, ms); return; }
+    } catch (e) { /* ignore */ }
+    if (console && console.info) console.info('stiAnalytics:', msg);
+  }
+
+  // Robust fetch with timeout and parsing
+  async function fetchJsonWithTimeout(url, opts = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+    if (!url) throw new TypeError('fetchJsonWithTimeout: missing url');
+
+    const fetchFn = api._fetchOverride || platform.fetch;
+    if (!fetchFn) throw new Error('Fetch is not available in this environment');
+
+    const AbortCtor = api._AbortControllerOverride || platform.AbortController;
+    let controller = null;
+    if (AbortCtor) controller = new AbortCtor();
+
+    const finalOpts = Object.assign({}, opts);
+    if (controller) finalOpts.signal = controller.signal;
+    finalOpts.credentials = finalOpts.credentials || 'same-origin';
+
+    let timer = null;
+    if (controller) timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetchFn(url, finalOpts);
+      if (timer) clearTimeout(timer);
+      const text = await (res.text ? res.text().catch(() => '') : Promise.resolve(''));
+      if (!res.ok) {
+        const parsed = _tryParseJson(text) || text || `status ${res.status}`;
+        const err = new Error(`Request ${url} failed (${res.status})`);
+        err.status = res.status;
+        err.body = parsed;
+        throw err;
+      }
+      const parsed = _tryParseJson(text);
+      if (parsed !== null) return parsed;
+      // fallback: try first non-empty line (JSONL)
+      const first = (text || '').split(/\r?\n/).find(Boolean) || '';
+      const firstParsed = _tryParseJson(first);
+      if (firstParsed !== null) return firstParsed;
+      // give raw text as last resort
+      return text;
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        const e = new Error('Request aborted (timeout)');
+        e.code = 'ABORT';
+        throw e;
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  // ---------- drawing primitives ----------
+  function _clearCanvas(canvas) {
     if (!canvas || !canvas.getContext) return;
-    var ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   function drawPlaceholder(canvas, text) {
     if (!canvas || !canvas.getContext) return;
-    var ctx = canvas.getContext('2d');
-    var w = canvas.width;
-    var h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
+    const ctx = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+    // compute logical CSS space
+    const cssW = Math.max(320, Math.floor((canvas.width || 640) / ratio));
+    const cssH = Math.max(120, Math.floor((canvas.height || 240) / ratio));
     ctx.save();
-    ctx.font = '15px sans-serif';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(ratio, ratio);
+    ctx.fillStyle = '#ffffff';
+    // subtle background (respect transparency if host wants)
+    // ctx.fillRect(0, 0, cssW, cssH);
     ctx.fillStyle = '#666';
+    const fontSize = Math.max(12, Math.round(cssH * 0.05));
+    ctx.font = `${fontSize}px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    wrapText(ctx, text, w / 2, h / 2, Math.max(200, w * 0.8), 18);
+    _wrapText(ctx, text || 'No data', cssW / 2, cssH / 2, Math.max(120, cssW * 0.8), Math.max(16, fontSize + 4));
     ctx.restore();
     canvas.__renderedByAnalytics = true;
   }
 
-  // small helper to wrap text on canvas
-  function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-    var words = String(text || '').split(' ');
-    var line = '';
-    var lines = [];
-    for (var n = 0; n < words.length; n++) {
-      var testLine = line + words[n] + ' ';
-      var metrics = ctx.measureText(testLine);
-      var testWidth = metrics.width;
-      if (testWidth > maxWidth && n > 0) {
-        lines.push(line.trim());
-        line = words[n] + ' ';
+  function _wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = String(text || '').split(' ');
+    let line = '';
+    const lines = [];
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line ? (line + ' ' + words[i]) : words[i];
+      const tm = ctx.measureText(testLine).width;
+      if (tm > maxWidth && line) {
+        lines.push(line);
+        line = words[i];
       } else {
         line = testLine;
       }
     }
-    if (line) lines.push(line.trim());
-    // center vertically
-    var startY = y - ((lines.length - 1) * lineHeight) / 2;
-    for (var i = 0; i < lines.length; i++) {
+    if (line) lines.push(line);
+    const startY = y - ((lines.length - 1) * lineHeight) / 2;
+    for (let i = 0; i < lines.length; i++) {
       ctx.fillText(lines[i], x, startY + i * lineHeight);
     }
   }
 
-  function drawBarChart(canvas, labels, values, opts) {
+  // simple bar chart: neutral, no color hardcoding required by consumer
+  function drawBarChart(canvas, labels = [], values = [], opts = {}) {
     if (!canvas || !canvas.getContext) return;
-    opts = opts || {};
-    var ctx = canvas.getContext('2d');
-    var w = canvas.width;
-    var h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    if (!values || values.length === 0) {
+    if (!Array.isArray(values) || values.length === 0) {
       drawPlaceholder(canvas, opts.emptyText || 'No data');
       return;
     }
 
-    var padding = 10;
-    var chartW = w - padding * 2;
-    var chartH = h - padding * 2 - 20; // reserve top area
-    var numericVals = values.map(function (v) { return typeof v === 'number' ? v : (parseFloat(v) || 0); });
-    var maxVal = Math.max.apply(null, numericVals);
-    maxVal = maxVal || 1; // avoid division by zero
-    var barGap = Math.max(4, Math.floor(chartW / numericVals.length * 0.08));
-    var barW = Math.max(6, Math.floor((chartW - barGap * (numericVals.length - 1)) / numericVals.length));
+    const ctx = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+    const cssW = Math.max(320, Math.floor(canvas.width / ratio));
+    const cssH = Math.max(120, Math.floor(canvas.height / ratio));
+    const padding = Math.max(6, Math.round(cssW * 0.04));
+    const chartW = cssW - padding * 2;
+    const chartH = cssH - padding * 2 - 28;
+    const numeric = values.map(v => (typeof v === 'number' ? v : (parseFloat(v) || 0)));
+    const maxVal = Math.max.apply(null, numeric) || 1;
+    const count = Math.max(1, numeric.length);
+    const gap = Math.max(4, Math.floor(chartW / count * 0.06));
+    const barW = Math.max(6, Math.floor((chartW - gap * (count - 1)) / count));
 
     ctx.save();
-    ctx.font = '12px sans-serif';
-    ctx.fillStyle = '#222';
-    ctx.textAlign = 'center';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(ratio, ratio);
 
-    numericVals.forEach(function (v, i) {
-      var x = padding + i * (barW + barGap);
-      var barH = Math.round((Math.max(0, v) / maxVal) * chartH);
-      var y = padding + (chartH - barH);
-      // bar (use default canvas fillStyle intentionally)
-      ctx.fillRect(x, y, barW, barH);
-      // label (truncate if long)
-      var lbl = labels[i] || '';
-      if (lbl.length > 20) lbl = lbl.slice(0, 17) + '...';
-      ctx.fillStyle = '#222';
-      ctx.fillText(lbl, x + barW / 2, padding + chartH + 12);
+    // optional title
+    if (opts.title) {
+      ctx.font = `${Math.max(12, Math.round(cssH * 0.035))}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = opts.titleColor || '#222';
+      ctx.fillText(opts.title, cssW / 2, Math.max(16, Math.round(cssH * 0.04)));
+    }
+
+    // bars
+    const baseY = padding + chartH;
+    ctx.textAlign = 'center';
+    ctx.font = `${Math.max(10, Math.round(cssH * 0.03))}px system-ui, sans-serif`;
+    numeric.forEach((v, i) => {
+      const x = padding + i * (barW + gap);
+      const barH = Math.round((Math.max(0, v) / maxVal) * chartH);
+      const y = baseY - barH;
+      // bar fill
+      ctx.fillStyle = (opts.barColor || '#2b6') ; // neutral default but overrideable
+      ctx.fillRect(Math.round(x), Math.round(y), Math.round(barW), Math.round(barH));
+      // label (shorten if needed)
+      const label = (labels && labels[i]) ? String(labels[i]) : '';
+      const shortLabel = label.length > 20 ? label.slice(0, 17) + '...' : label;
+      ctx.fillStyle = opts.labelColor || '#444';
+      ctx.fillText(shortLabel, Math.round(x + barW / 2), baseY + 16);
     });
 
-    // title
-    if (opts.title) {
-      ctx.font = '14px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#111';
-      ctx.fillText(opts.title, w / 2, 14);
-    }
-
     ctx.restore();
     canvas.__renderedByAnalytics = true;
   }
 
-  function drawListOnCanvas(canvas, items, opts) {
+  function drawListOnCanvas(canvas, items = [], opts = {}) {
     if (!canvas || !canvas.getContext) return;
-    var ctx = canvas.getContext('2d');
-    var w = canvas.width;
-    var h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
+    const ctx = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+    const cssW = Math.max(320, Math.floor(canvas.width / ratio));
+    const cssH = Math.max(120, Math.floor(canvas.height / ratio));
     ctx.save();
-    ctx.font = '13px sans-serif';
-    ctx.fillStyle = '#333';
-    var y = 20;
-    var max = Math.min(items.length, 10);
-    for (var i = 0; i < max; i++) {
-      var it = items[i];
-      var t = (it && (it.name || it.topic)) || String(it);
-      var count = (it && (it.count || it.value || it.duration)) ? ' — ' + (it.count || it.value || it.duration) : '';
-      ctx.fillText(t + count, 10, y);
-      y += 18;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(ratio, ratio);
+    ctx.font = `${Math.max(10, Math.round(cssH * 0.03))}px system-ui, sans-serif`;
+    ctx.fillStyle = opts.textColor || '#333';
+    let y = Math.max(18, Math.round(cssH * 0.05));
+    const max = Math.min(items.length, opts.maxItems || DRAW_CONFIG.maxWordCloudItems || 10);
+    for (let i = 0; i < max; i++) {
+      const it = items[i];
+      const txt = (it && (it.name || it.topic || it.text || String(it))) || String(it);
+      const suffix = (it && (it.count || it.value || it.score)) ? ' — ' + (it.count || it.value || it.score) : '';
+      ctx.fillText(String(txt) + suffix, 10, y);
+      y += Math.max(16, Math.round(cssH * 0.045));
+      if (y > cssH - 10) break;
     }
     ctx.restore();
     canvas.__renderedByAnalytics = true;
   }
 
-  // ---- high-level refresh ----
-  api._lastMetrics = null;
-  async function refreshPlaceholders(topicCanvas, speakerCanvas) {
-    // Try fetch metrics; if fail, draw placeholders
-    var data = null;
+  // ---------- high-level refresh & rendering ----------
+  async function tryFetchMetrics() {
+    for (let i = 0; i < endpoints.length; i++) {
+      const ep = endpoints[i];
+      if (!ep) continue;
+      try {
+        const data = await fetchJsonWithTimeout(ep, { method: 'GET' }, DEFAULT_FETCH_TIMEOUT_MS);
+        if (data) {
+          // emit success event
+          document.dispatchEvent(new CustomEvent('sti:analytics:fetch:ok', { detail: { endpoint: ep, data } }));
+          return data;
+        }
+      } catch (err) {
+        // debug but continue to next endpoint
+        if (console && console.debug) console.debug('tryFetchMetrics failed for', ep, err && err.message ? err.message : err);
+        document.dispatchEvent(new CustomEvent('sti:analytics:fetch:error', { detail: { endpoint: ep, error: err && (err.message || err) } }));
+      }
+    }
+    document.dispatchEvent(new CustomEvent('sti:analytics:fetch:none', { detail: { endpoints: endpoints.slice() } }));
+    return null;
+  }
+
+  async function refreshPlaceholders(topicCanvas, speakerCanvas, wordCloudEl) {
+    let data = null;
     try {
       data = await tryFetchMetrics();
     } catch (e) {
       data = null;
-      if (typeof console !== 'undefined') console.debug('tryFetchMetrics error', e && e.message ? e.message : e);
+      if (console && console.debug) console.debug('tryFetchMetrics threw', e);
     }
 
     api._lastMetrics = data;
@@ -207,118 +287,154 @@
     if (!data) {
       if (topicCanvas) drawPlaceholder(topicCanvas, 'Topic chart placeholder — no data');
       if (speakerCanvas) drawPlaceholder(speakerCanvas, 'Speaker chart placeholder — no data');
-      safeToast('Analytics refreshed (placeholder)', 1400);
+      if (wordCloudEl) {
+        if (!wordCloudEl.children || wordCloudEl.children.length === 0) {
+          wordCloudEl.innerHTML = '<p class="muted">No keywords to display. Upload sessions to populate analytics.</p>';
+        }
+      }
+      _toast('Analytics refreshed (placeholder)', 1400);
+      document.dispatchEvent(new CustomEvent('sti:analytics:refresh', { detail: { ok: false, data: null } }));
       return null;
     }
 
-    // Expect data shape to have e.g. data.topics: [{ name, count }], data.speakers: [{ name, duration }]
     try {
+      // Topics -> bar chart
       if (topicCanvas) {
-        var topics = data.topics || data.top_topics || data.topics_by_count || data.topK || [];
+        const topics =
+          data.topics || data.top_topics || data.topics_by_count || data.topK ||
+          (data.topicCounts ? Object.keys(data.topicCounts).map(k => ({ name: k, count: data.topicCounts[k] })) : null);
         if (Array.isArray(topics) && topics.length > 0) {
-          var labels = topics.map(function (t) { return (t && (t.name || t.topic)) || String(t); });
-          var vals = topics.map(function (t) { return (t && (t.count || t.value || t.score || 0)) || 0; });
-          drawBarChart(topicCanvas, labels, vals, { title: 'Top Topics', emptyText: 'No topics' });
+          const labels = topics.map(t => (t && (t.name || t.topic)) || String(t));
+          const vals = topics.map(t => (t && (t.count || t.value || t.score || 0)) || 0);
+          drawBarChart(topicCanvas, labels, vals, { title: 'Top Topics', emptyText: 'No topics', barColor: '#1f6' });
         } else {
-          // fallback: if data has topicCounts object map
-          if (data.topicCounts && typeof data.topicCounts === 'object') {
-            var kv = Object.keys(data.topicCounts).map(function (k) { return { name: k, count: data.topicCounts[k] }; });
-            kv.sort(function (a, b) { return (b.count || 0) - (a.count || 0); });
-            var top = kv.slice(0, 10);
-            drawBarChart(topicCanvas, top.map(function (x) { return x.name; }), top.map(function (x) { return x.count; }), { title: 'Top Topics' });
-          } else {
-            drawPlaceholder(topicCanvas, 'No topic metrics');
-          }
+          drawPlaceholder(topicCanvas, 'No topic metrics');
         }
       }
 
+      // Speakers -> bar chart
       if (speakerCanvas) {
-        var speakers = data.speakers || data.speaker_participation || data.speakers_by_time || [];
+        const speakers = data.speakers || data.speaker_participation || data.speakers_by_time ||
+          (data.speakerCounts ? Object.keys(data.speakerCounts).map(k => ({ name: k, count: data.speakerCounts[k] })) : null);
         if (Array.isArray(speakers) && speakers.length > 0) {
-          var sLabels = speakers.map(function (s) { return (s && (s.name || s.speaker)) || String(s); });
-          var sVals = speakers.map(function (s) { return (s && (s.duration || s.talk_time || s.value)) || 0; });
-          drawBarChart(speakerCanvas, sLabels, sVals, { title: 'Speaker participation', emptyText: 'No speakers' });
-        } else if (data.speakerCounts && typeof data.speakerCounts === 'object') {
-          var sk = Object.keys(data.speakerCounts).map(function (k) { return { name: k, count: data.speakerCounts[k] }; });
-          sk.sort(function (a, b) { return (b.count || 0) - (a.count || 0); });
-          var topS = sk.slice(0, 10);
-          drawBarChart(speakerCanvas, topS.map(function (x) { return x.name; }), topS.map(function (x) { return x.count; }), { title: 'Speaker participation' });
+          const labels = speakers.map(s => (s && (s.name || s.speaker)) || String(s));
+          const vals = speakers.map(s => (s && (s.duration || s.talk_time || s.value || s.count)) || 0);
+          drawBarChart(speakerCanvas, labels, vals, { title: 'Speaker participation', emptyText: 'No speakers', barColor: '#36a' });
         } else {
           drawPlaceholder(speakerCanvas, 'No speaker metrics');
         }
       }
 
-      safeToast('Analytics refreshed', 1200);
+      // Keywords / word cloud -> DOM render (prefer DOM for accessibility)
+      if (wordCloudEl) {
+        const kws = data.keywords || data.top_keywords || data.wordcloud || data.topTerms || data.key_terms || [];
+        if (Array.isArray(kws) && kws.length > 0) {
+          wordCloudEl.innerHTML = '';
+          const frag = document.createDocumentFragment();
+          const max = Math.min(kws.length, DRAW_CONFIG.maxWordCloudItems || 40);
+          for (let i = 0; i < max; i++) {
+            const k = kws[i];
+            const span = document.createElement('span');
+            span.className = 'keyword-item';
+            span.textContent = (k && (k.text || k.word || k.name || String(k))) || String(k);
+            span.setAttribute('role', 'listitem');
+            frag.appendChild(span);
+          }
+          wordCloudEl.appendChild(frag);
+        } else {
+          if (!wordCloudEl.children || wordCloudEl.children.length === 0) {
+            wordCloudEl.innerHTML = '<p class="muted">No keywords to display.</p>';
+          }
+        }
+      }
+
+      _toast('Analytics refreshed', 1200);
+      document.dispatchEvent(new CustomEvent('sti:analytics:refresh', { detail: { ok: true, data } }));
       return data;
     } catch (e) {
-      // Fallback to placeholders if rendering fails
+      // partial failure: draw placeholders
       if (topicCanvas) drawPlaceholder(topicCanvas, 'Topic chart placeholder — error');
       if (speakerCanvas) drawPlaceholder(speakerCanvas, 'Speaker chart placeholder — error');
-      if (typeof console !== 'undefined') console.warn('analytics render failed', e);
-      safeToast('Analytics refreshed (partial)', 1400);
+      if (console && console.warn) console.warn('analytics render failed', e);
+      _toast('Analytics refreshed (partial)', 1400);
+      document.dispatchEvent(new CustomEvent('sti:analytics:refresh', { detail: { ok: false, data: null, error: e && (e.message || e) } }));
       return null;
     }
   }
 
-  // ---- initialization ----
+  // ---------- initialization ----------
   function safeInit() {
-    var topicCanvas = document.getElementById('topic-chart');
-    var speakerCanvas = document.getElementById('speaker-chart');
+    try {
+      const topicCanvas = document.getElementById('topic-chart');
+      const speakerCanvas = document.getElementById('speaker-chart');
+      const wordCloudEl = document.getElementById('wordcloud');
+      const refreshBtn = document.getElementById('analytics-refresh');
 
-    // ensure canvases have reasonable default pixel sizes if not set
-    [topicCanvas, speakerCanvas].forEach(function (c) {
-      if (!c) return;
-      // if canvas has no width/height attributes, set default CSS-based size converted to device pixels
-      if (!c.hasAttribute('width')) {
-        var rect = c.getBoundingClientRect();
-        var w = Math.max(320, Math.min(900, Math.round(rect.width || 640)));
-        var h = Math.max(120, Math.round((rect.height && rect.height > 0) ? rect.height : (w * 0.35)));
-        // set drawing buffer size to CSS px * devicePixelRatio for crispness
-        var ratio = window.devicePixelRatio || 1;
-        c.width = Math.floor(w * ratio);
-        c.height = Math.floor(h * ratio);
-        c.style.width = w + 'px';
-        c.style.height = h + 'px';
-      } else {
-        // respect explicit attrs but ensure pixel ratio
-        var ratio = window.devicePixelRatio || 1;
-        c.width = Math.floor(c.width * ratio);
-        c.height = Math.floor(c.height * ratio);
+      // ensure crisp buffer sizing (caller can override sizing later)
+      [topicCanvas, speakerCanvas].forEach(c => {
+        if (!c || !c.getContext) return;
+        try {
+          const rect = c.getBoundingClientRect();
+          const cssW = Math.max(320, Math.round(rect.width || 640));
+          const cssH = Math.max(120, Math.round(rect.height || Math.floor(cssW * 0.35)));
+          const ratio = window.devicePixelRatio || 1;
+          c.width = Math.floor(cssW * ratio);
+          c.height = Math.floor(cssH * ratio);
+          c.style.width = `${cssW}px`;
+          c.style.height = `${cssH}px`;
+        } catch (e) {
+          // non-fatal
+        }
+      });
+
+      // initial placeholders
+      if (topicCanvas && !topicCanvas.__renderedByAnalytics) drawPlaceholder(topicCanvas, 'Topic chart placeholder — loading');
+      if (speakerCanvas && !speakerCanvas.__renderedByAnalytics) drawPlaceholder(speakerCanvas, 'Speaker chart placeholder — loading');
+      if (wordCloudEl && (!wordCloudEl.children || wordCloudEl.children.length === 0)) wordCloudEl.innerHTML = '<p class="muted">No keywords to display.</p>';
+
+      if (refreshBtn && !refreshBtn.__handled) {
+        refreshBtn.addEventListener('click', function () {
+          refreshPlaceholders(topicCanvas, speakerCanvas, wordCloudEl).catch(() => {});
+        }, { passive: true });
+        refreshBtn.addEventListener('keydown', function (ev) {
+          if (ev && (ev.key === 'Enter' || ev.key === ' ')) {
+            ev.preventDefault();
+            refreshPlaceholders(topicCanvas, speakerCanvas, wordCloudEl).catch(() => {});
+          }
+        }, { passive: true });
+        refreshBtn.__handled = true;
       }
-    });
 
-    // Initial draw if not already drawn by fallbacks
-    if (topicCanvas && !topicCanvas.__renderedByAnalytics) {
-      drawPlaceholder(topicCanvas, 'Topic chart placeholder — loading');
+      // expose API
+      api.drawPlaceholder = drawPlaceholder;
+      api.drawBarChart = drawBarChart;
+      api.drawListOnCanvas = drawListOnCanvas;
+      api.refresh = function () {
+        return refreshPlaceholders(topicCanvas, speakerCanvas, wordCloudEl);
+      };
+      api.getLast = function () { return api._lastMetrics; };
+      api.setEndpoints = function (ep) {
+        if (!ep) return;
+        endpoints = Array.isArray(ep) ? ep.slice() : (typeof ep === 'string' ? [ep] : endpoints);
+        api._config.endpoints = endpoints.slice();
+        document.dispatchEvent(new CustomEvent('sti:analytics:endpoints:set', { detail: { endpoints: endpoints.slice() } }));
+      };
+
+      // test hooks
+      api._setFetch = function (fn) { api._fetchOverride = fn; };
+      api._setAbortController = function (Ctor) { api._AbortControllerOverride = Ctor; };
+      api._resetOverrides = function () { delete api._fetchOverride; delete api._AbortControllerOverride; };
+
+      // auto-refresh once (best-effort)
+      (async function () {
+        try { await api.refresh(); } catch (e) { /* swallow */ }
+      }());
+
+      // ready event
+      document.dispatchEvent(new CustomEvent('sti:analytics:ready', { detail: { endpoints: endpoints.slice() } }));
+    } catch (e) {
+      if (console && console.warn) console.warn('stiAnalytics safeInit failed', e);
     }
-    if (speakerCanvas && !speakerCanvas.__renderedByAnalytics) {
-      drawPlaceholder(speakerCanvas, 'Speaker chart placeholder — loading');
-    }
-
-    // Bind refresh button
-    var refreshBtn = document.getElementById('analytics-refresh');
-    if (refreshBtn && !refreshBtn.__handled) {
-      refreshBtn.addEventListener('click', function () {
-        // call and ignore promise (UI shows toast)
-        refreshPlaceholders(topicCanvas, speakerCanvas).catch(function () { /* swallow */ });
-      }, { passive: true });
-      refreshBtn.__handled = true;
-    }
-
-    // Expose API
-    api.drawPlaceholder = drawPlaceholder;
-    api.refresh = function () {
-      return refreshPlaceholders(topicCanvas, speakerCanvas);
-    };
-    api.getLast = function () { return api._lastMetrics; };
-
-    // Auto-refresh once when loaded (best-effort)
-    // Don't block page load; swallow errors
-    (function () {
-      try {
-        api.refresh();
-      } catch (e) { /* ignore */ }
-    }());
   }
 
   if (document.readyState === 'loading') {
@@ -326,4 +442,14 @@
   } else {
     safeInit();
   }
+
+  // expose internals for testing / debug completeness
+  api._fetchJsonWithTimeout = fetchJsonWithTimeout;
+  api.tryFetchMetrics = tryFetchMetrics;
+  api._drawPlaceholder = drawPlaceholder;
+  api._drawBarChart = drawBarChart;
+  api._drawListOnCanvas = drawListOnCanvas;
+
+  // final assignment
+  window.stiAnalytics = window.stiAnalytics || api;
 })();

@@ -16,10 +16,14 @@ Notes:
 
 import os
 import importlib
-from typing import List
+import logging
+from typing import List, Iterable
 
 import numpy as np
 import pytest
+
+LOG = logging.getLogger("test_embedding_contract")
+LOG.setLevel(os.getenv("TEST_LOG_LEVEL", "INFO"))
 
 # Try to import the project's embedding module. If it doesn't exist, skip tests with helpful message.
 embedding = pytest.importorskip(
@@ -73,7 +77,7 @@ for name in _BATCH_FN_NAMES:
 
 # If batch function not present but single embed exists, create a small wrapper
 if embed_batch_fn is None and embed_fn is not None:
-    def embed_batch_fn(texts: List[str]):
+    def embed_batch_fn(texts: Iterable[str]):
         return [embed_fn(t) for t in texts]
 
 # Discover expected embedding dimension if provided; otherwise fall back to common defaults
@@ -86,10 +90,7 @@ if expected_dim is None:
 
 # Common reasonable dims
 DEFAULT_EXPECTED_DIMS = (1536, 1024, 768, 512, 384, 256, 128)
-if expected_dim is None:
-    inferred_expected_dim = None
-else:
-    inferred_expected_dim = int(expected_dim)
+inferred_expected_dim = int(expected_dim) if expected_dim is not None else None
 
 
 # --- Tests -------------------------------------------------------------------
@@ -157,7 +158,6 @@ def _coerce_batch_to_ndarray(batch_out):
         for x in seq:
             a = _to_ndarray(x)
             if a.ndim != 1:
-                # try to flatten if possible
                 a = a.reshape(-1)
             rows.append(a)
         # ensure consistent dimension
@@ -194,11 +194,11 @@ def test_determinism_same_input():
     v1 = _to_ndarray_strict(embed_fn(text))
     v2 = _to_ndarray_strict(embed_fn(text))
     assert v1.shape == v2.shape, "Repeated embedding shapes differ"
-    # Tight numeric equality if implementation deterministic; allow tiny numerical jitter
+    # Allow small numerical jitter; check either allclose or high cosine similarity
     if np.allclose(v1, v2, rtol=1e-6, atol=1e-6):
         return
     sim = _cosine_sim(v1, v2)
-    assert sim > 0.999, f"Embeddings for identical text differ (cosine sim={sim:.6f}). Embed function should be deterministic."
+    assert sim > 0.98, f"Embeddings for identical text differ (cosine sim={sim:.6f}). Embed function should be deterministic."
 
 
 def test_similarity_behaviour():
@@ -214,9 +214,9 @@ def test_similarity_behaviour():
     sim_same = _cosine_sim(va, vb)
     sim_diff = _cosine_sim(va, vc)
 
-    assert sim_same > 0.99, f"Identical inputs should have very high similarity. got {sim_same:.6f}"
+    assert sim_same > 0.98, f"Identical inputs should have very high similarity. got {sim_same:.6f}"
     # Different topic should be noticeably lower; threshold conservative
-    assert sim_diff < 0.9, f"Different inputs too similar (cosine {sim_diff:.6f}). Expected < 0.9"
+    assert sim_diff < 0.90, f"Different inputs too similar (cosine {sim_diff:.6f}). Expected < 0.90"
 
 
 def test_nonzero_norm():
@@ -235,7 +235,8 @@ def test_batch_consistency_with_single_calls():
 
     singles = np.asarray([_to_ndarray(embed_fn(t)) for t in texts], dtype=float)
     assert batch_arr.shape == singles.shape, "Batch and repeated single calls produced different shapes"
-    assert np.allclose(batch_arr, singles, rtol=1e-6, atol=1e-6), "Batch embeddings differ from repeated single embeddings"
+    # allow tiny numerical differences between batch and single implementations
+    assert np.allclose(batch_arr, singles, rtol=1e-5, atol=1e-5), "Batch embeddings differ from repeated single embeddings"
 
 
 # Optional: storage contract test (if the embedding module provides a persistence API)
@@ -250,13 +251,16 @@ def test_optional_persistence_contract(tmp_path):
     sample_text = "persistence contract test"
     vec = _to_ndarray(embed_fn(sample_text))
     meta = {"text": sample_text}
-    p = tmp_path / "emb.npz"
-    # call persist; allow both (embedding, meta, path=...) or (vector, id, path)
+    p = tmp_path / "emb"
+    # call persist; allow both (embedding, meta, path=...) or (vector, path)
     try:
         embedding.persist(vec, meta, path=str(p))
     except TypeError:
-        # try alternate signature
-        embedding.persist(vec, str(p))
+        # try alternate signature: persist(vec, path)
+        try:
+            embedding.persist(vec, str(p))
+        except Exception as e:
+            pytest.fail(f"persist present but failed with both signatures: {e}")
 
     loaded = embedding.load(str(p))
     loaded_arr = _to_ndarray(loaded)

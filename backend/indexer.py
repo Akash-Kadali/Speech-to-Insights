@@ -16,7 +16,6 @@ Features / improvements:
 - CLI: build index from text files, interactive query mode, save/load utilities.
 - Defensive behavior and clear logging.
 """
-
 from __future__ import annotations
 
 import os
@@ -67,12 +66,19 @@ def _cosine_sim_matrix(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
     Compute cosine similarity between query_vec (d,) and matrix (n,d) and return (n,) scores.
     Handles zero vectors robustly.
     """
-    qn = np.linalg.norm(query_vec)
-    mn = np.linalg.norm(matrix, axis=1)
+    # ensure shapes
+    q = np.asarray(query_vec, dtype=np.float32).reshape(-1)
+    mat = np.asarray(matrix, dtype=np.float32)
+    if mat.ndim != 2:
+        raise ValueError("matrix must be 2-D numpy array")
+    if mat.shape[1] != q.shape[0]:
+        raise ValueError("dimension mismatch between query and matrix")
+
+    qn = np.linalg.norm(q)
+    mn = np.linalg.norm(mat, axis=1)
     denom = qn * mn
     denom_safe = np.where(denom == 0, 1e-12, denom)
-    sims = (matrix @ query_vec) / denom_safe
-    # clip to [-1, 1] for numeric stability
+    sims = (mat @ q) / denom_safe
     return np.clip(sims, -1.0, 1.0)
 
 
@@ -139,8 +145,8 @@ class VectorIndex:
         self.dim = int(dim)
         self.vectors = np.zeros((0, self.dim), dtype=np.float32)
         if self.use_faiss:
-            # use inner product on normalized vectors to emulate cosine similarity
             try:
+                # we'll use inner product on normalized vectors to emulate cosine
                 self.faiss_index = faiss.IndexFlatIP(self.dim)
                 logger.debug("Initialized faiss IndexFlatIP dim=%d", self.dim)
             except Exception:
@@ -182,7 +188,7 @@ class VectorIndex:
 
         - metas: optional metadata aligned to texts
         - ids: optional ids aligned to texts
-        - chunking: if provided (n_chars) long docs are chunked into windows of ~n_chars with overlap (80%)
+        - chunking: if provided (n_chars) long docs are chunked into windows of ~n_chars with overlap (80%).
         Returns list of ids added.
         """
         if metas is None:
@@ -195,7 +201,7 @@ class VectorIndex:
         expanded_ids: List[str] = []
 
         for i, txt in enumerate(texts):
-            if chunking and len(txt) > chunking:
+            if chunking and txt and len(txt) > chunking:
                 step = max(1, int(chunking * 0.8))
                 start = 0
                 chunk_idx = 0
@@ -211,7 +217,7 @@ class VectorIndex:
                     start += step
             else:
                 expanded_texts.append(txt)
-                expanded_metas.append(metas[i])
+                expanded_metas.append(metas[i] if metas else {})
                 expanded_ids.append(ids[i])
 
         if not expanded_texts:
@@ -263,10 +269,13 @@ class VectorIndex:
         npy_path = base.with_name(base.name + ".npy")
         faiss_path = base.with_name(base.name + ".faiss")
 
-        with open(meta_path, "w", encoding="utf-8") as fh:
-            json.dump(self.meta, fh, ensure_ascii=False, indent=2)
-        with open(ids_path, "w", encoding="utf-8") as fh:
-            json.dump(self.ids, fh, ensure_ascii=False, indent=2)
+        try:
+            with open(meta_path, "w", encoding="utf-8") as fh:
+                json.dump(self.meta, fh, ensure_ascii=False, indent=2)
+            with open(ids_path, "w", encoding="utf-8") as fh:
+                json.dump(self.ids, fh, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.exception("Failed to write meta/ids to disk")
 
         if self.use_faiss and self.faiss_index is not None:
             try:
@@ -275,12 +284,18 @@ class VectorIndex:
             except Exception:
                 logger.exception("Failed to save faiss index; falling back to numpy array")
                 if self.vectors is not None:
-                    np.save(str(npy_path), self.vectors)
-                    logger.info("Saved numpy vectors to %s", npy_path)
+                    try:
+                        np.save(str(npy_path), self.vectors)
+                        logger.info("Saved numpy vectors to %s", npy_path)
+                    except Exception:
+                        logger.exception("Failed to save numpy vectors")
         else:
             if self.vectors is not None:
-                np.save(str(npy_path), self.vectors)
-                logger.info("Saved numpy vectors to %s", npy_path)
+                try:
+                    np.save(str(npy_path), self.vectors)
+                    logger.info("Saved numpy vectors to %s", npy_path)
+                except Exception:
+                    logger.exception("Failed to save numpy vectors")
 
         logger.info("Saved metadata %s and ids %s", meta_path, ids_path)
         return base
@@ -314,11 +329,9 @@ class VectorIndex:
         if prefer_faiss:
             try:
                 vi.faiss_index = faiss.read_index(str(faiss_path))
-                # faiss IndexFlatIP has attribute d for dimension in many builds
                 try:
-                    vi.dim = int(vi.faiss_index.d)
+                    vi.dim = int(getattr(vi.faiss_index, "d", None))
                 except Exception:
-                    # fallback: infer from stored numpy vectors if present
                     vi.dim = None
                 logger.info("Loaded faiss index from %s (dim=%s)", faiss_path, vi.dim)
                 return vi
@@ -380,7 +393,6 @@ class VectorIndex:
                     results.append((int(idx), float(sc)))
             except Exception:
                 logger.exception("Faiss search failed; falling back to numpy scan")
-                # fallback to numpy below
                 if self.vectors is not None and self.vectors.shape[0] > 0:
                     sims = _cosine_sim_matrix(qvec, self.vectors)
                     top_idx = np.argsort(-sims)[:k]
@@ -398,8 +410,8 @@ class VectorIndex:
         for idx, score in results:
             out.append(
                 {
-                    "id": self.ids[idx] if idx < len(self.ids) else None,
-                    "meta": self.meta[idx] if idx < len(self.meta) else {},
+                    "id": self.ids[idx] if 0 <= idx < len(self.ids) else None,
+                    "meta": self.meta[idx] if 0 <= idx < len(self.meta) else {},
                     "score": float(score),
                 }
             )
@@ -423,7 +435,11 @@ def build_index_from_text_files(
         if not p.exists():
             logger.warning("Skipping missing file %s", p)
             continue
-        text = p.read_text(encoding="utf-8")
+        try:
+            text = p.read_text(encoding="utf-8")
+        except Exception:
+            logger.exception("Failed to read file %s; skipping", p)
+            continue
         texts.append(text)
         metas.append({"source": str(p), "name": p.name})
         ids.append(str(uuid.uuid4()))

@@ -1,170 +1,336 @@
-// contact.js — demo contact form: validate and reset (no external email)
-// Final corrected version: defensive, optional backend submit, timeout-safe fetch, exposes API.
+/**
+ * contact.js — Corrected, enhanced, and upgraded contact form module
+ *
+ * - Defensive client-side validation (practical email check)
+ * - Timeout-safe POST to backend, graceful demo fallback
+ * - Accessible: aria-busy, aria-invalid, keyboard shortcut (Ctrl/Cmd+Enter)
+ * - Exposes stable API on window.stiContact:
+ *     .handleSubmit(event, opts) -> Promise<boolean>
+ *     .trySendToBackend(payload, customEndpoint) -> Promise<response|null>
+ *     .configure(cfg)
+ *     ._setFetch(fn) / ._setAbortController(Ctor) -> test hooks
+ * - Emits CustomEvents for integration/tests:
+ *     sti:contact:ready, sti:contact:validation, sti:contact:send:start,
+ *     sti:contact:send:ok, sti:contact:send:fail
+ *
+ * Non-destructive: idempotent initialization and safe to include multiple times.
+ */
 (function () {
   'use strict';
 
-  // Expose small API for detection / debugging
-  var api = window.stiContact || (window.stiContact = {});
+  // ---------- Defaults & host-config ----------
+  const DEFAULT_ENDPOINT = '/contact';
+  const DEFAULT_TIMEOUT_MS = 3000;
+  const DEFAULT_MIN_SUBMIT_MS = 2000; // rate limit repeated submits
+  const DEFAULT_MAX_PAYLOAD_CHARS = 40_000; // safety guard
 
-  // Configurable endpoint and timeout (override via window.STI_CONTACT_ENDPOINT or window.STI)
-  var CONTACT_ENDPOINT = (window.STI && window.STI.CONTACT_ENDPOINT) || window.STI_CONTACT_ENDPOINT || '/contact';
-  var FETCH_TIMEOUT_MS = (window.STI && window.STI.CONTACT_FETCH_TIMEOUT_MS) || 3000;
+  const hostCfg = (window.STI && window.STI.CONTACT) || window.STI_CONTACT || {};
+  let endpoint = (hostCfg && hostCfg.ENDPOINT) ||
+                 (window.STI && window.STI.CONTACT_ENDPOINT) ||
+                 window.STI_CONTACT_ENDPOINT ||
+                 DEFAULT_ENDPOINT;
 
-  // Normalize endpoint if array provided
-  if (Array.isArray(CONTACT_ENDPOINT)) CONTACT_ENDPOINT = CONTACT_ENDPOINT[0];
+  let FETCH_TIMEOUT_MS = (hostCfg && Number.isFinite(hostCfg.FETCH_TIMEOUT_MS) && hostCfg.FETCH_TIMEOUT_MS) ||
+                         (Number.isFinite(window.STI_CONTACT_FETCH_TIMEOUT_MS) && window.STI_CONTACT_FETCH_TIMEOUT_MS) ||
+                         DEFAULT_TIMEOUT_MS;
 
-  function isValidEmail(email) {
-    // Simple, practical validation for demo use
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+  // ---------- Module API surface ----------
+  const api = window.stiContact || (window.stiContact = {});
+  api._config = { endpoint, FETCH_TIMEOUT_MS, DEFAULT_MIN_SUBMIT_MS, DEFAULT_MAX_PAYLOAD_CHARS };
+
+  // Test overrides (injected in tests)
+  api._fetchOverride = null;
+  api._AbortControllerOverride = null;
+
+  // Internal platform wrappers (safe)
+  const platform = {
+    fetch: typeof window.fetch === 'function' ? window.fetch.bind(window) : null,
+    AbortController: typeof window.AbortController === 'function' ? window.AbortController : null,
+    now: () => Date.now()
+  };
+
+  // ---------- Utilities ----------
+  function _trim(s) { return String(s == null ? '' : s).trim(); }
+
+  function _isValidEmail(email) {
+    // Practical client-side check (not RFC-perfect). Good enough for UX.
+    const e = _trim(email);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   }
 
-  function safeToast(msg, timeout) {
-    if (typeof window.showToast === 'function') {
-      try { window.showToast(msg, timeout); } catch (e) { if (console && console.info) console.info('Toast:', msg); }
-    } else if (console && console.info) {
-      console.info('Toast:', msg);
+  function _safeToast(message, ms) {
+    try {
+      if (typeof window.showToast === 'function') { window.showToast(message, ms); return; }
+    } catch (e) { /* swallow */ }
+
+    const toast = document.getElementById('toast');
+    if (toast) {
+      toast.hidden = false;
+      toast.textContent = String(message || '');
+      toast.classList.add('visible');
+      clearTimeout(toast.__timer);
+      toast.__timer = setTimeout(() => { toast.classList.remove('visible'); toast.hidden = true; }, typeof ms === 'number' ? ms : 3000);
+      return;
+    }
+    if (console && console.info) console.info('stiContact:', message);
+  }
+
+  function _tryParseText(text) {
+    if (text === undefined || text === null) return text;
+    try { return JSON.parse(text); } catch (e) { return String(text); }
+  }
+
+  function _getFormEls() {
+    return {
+      form: document.getElementById('contact-form'),
+      nameEl: document.getElementById('contact-name'),
+      emailEl: document.getElementById('contact-email'),
+      messageEl: document.getElementById('contact-message'),
+      submitBtn: (function (form) { return form && (form.querySelector('button[type="submit"], input[type="submit"]') || null); })(document.getElementById('contact-form'))
+    };
+  }
+
+  // ---------- Network: fetch with timeout & safe parsing ----------
+  async function fetchJsonWithTimeout(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+    if (!url) throw new TypeError('fetchJsonWithTimeout: missing url');
+
+    const fetchFn = api._fetchOverride || platform.fetch;
+    if (!fetchFn) throw new Error('Fetch not available in this environment');
+
+    const AbortCtor = api._AbortControllerOverride || platform.AbortController;
+    let controller = null;
+    if (AbortCtor) controller = new AbortCtor();
+
+    const finalOpts = Object.assign({}, opts);
+    if (controller) finalOpts.signal = controller.signal;
+    finalOpts.credentials = finalOpts.credentials || 'same-origin';
+
+    let timer = null;
+    if (controller) timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetchFn(url, finalOpts);
+      if (timer) clearTimeout(timer);
+      const text = await (res.text ? res.text().catch(() => '') : Promise.resolve(''));
+      if (!res.ok) {
+        const body = _tryParseText(text);
+        const err = new Error(`Request failed (${res.status})`);
+        err.status = res.status;
+        err.body = body;
+        throw err;
+      }
+      return _tryParseText(text);
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        const e = new Error('Request aborted (timeout)');
+        e.code = 'ABORT';
+        throw e;
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
-  // Helper: try parse JSON or return raw text
-  function _tryParseTextAsJson(text) {
-    try { return JSON.parse(text); } catch (e) { return text; }
-  }
+  // ---------- trySendToBackend (non-fatal) ----------
+  // returns parsed response on success, null on failure
+  async function trySendToBackend(payload, customEndpoint) {
+    const url = (typeof customEndpoint === 'string' && customEndpoint) ? customEndpoint : endpoint;
+    if (!url) return null;
 
-  // Fetch wrapper with timeout; returns parsed JSON/text or throws
-  function fetchJsonWithTimeout(url, opts, timeoutMs) {
-    timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : FETCH_TIMEOUT_MS;
-    var controller = new AbortController();
-    var id = setTimeout(function () { controller.abort(); }, timeoutMs);
-    opts = opts || {};
-    opts.credentials = opts.credentials || 'same-origin';
-    opts.signal = controller.signal;
-    return fetch(url, opts)
-      .then(function (res) {
-        clearTimeout(id);
-        return res.text().then(function (t) {
-          if (!res.ok) {
-            var parsedErr = _tryParseTextAsJson(t);
-            var e = new Error('Network response not ok: ' + res.status);
-            e.status = res.status;
-            e.body = parsedErr;
-            throw e;
-          }
-          return _tryParseTextAsJson(t);
-        });
-      })
-      .finally(function () { clearTimeout(id); });
-  }
-
-  // Try to POST message to backend; if endpoint not available, resolve with null
-  async function trySendToBackend(payload) {
+    // payload sanity guard (best-effort)
     try {
-      var resp = await fetchJsonWithTimeout(CONTACT_ENDPOINT, {
+      const s = JSON.stringify(payload || {});
+      if (s.length > (api._config.DEFAULT_MAX_PAYLOAD_CHARS || DEFAULT_MAX_PAYLOAD_CHARS)) {
+        if (console && console.warn) console.warn('stiContact: payload large (%d chars)', s.length);
+      }
+    } catch (e) { /* ignore */ }
+
+    try {
+      const resp = await fetchJsonWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       }, FETCH_TIMEOUT_MS);
       return resp;
-    } catch (e) {
-      // Non-fatal for demo: backend may not be implemented
-      if (console && console.info) console.info('contact backend not available or failed:', e && e.message ? e.message : e);
+    } catch (err) {
+      if (console && console.info) console.info('stiContact backend POST failed', err && (err.message || err));
       return null;
     }
   }
 
-  // Main submit handler
-  async function handleSubmit(e) {
+  // ---------- Rate limiting helpers ----------
+  let _lastSubmitAt = 0;
+  function _isSubmitTooSoon() {
+    const now = platform.now();
+    if (now - _lastSubmitAt < (api._config.DEFAULT_MIN_SUBMIT_MS || DEFAULT_MIN_SUBMIT_MS)) return true;
+    _lastSubmitAt = now;
+    return false;
+  }
+
+  // ---------- Main handler ----------
+  // handleSubmit(event, opts) -> Promise<boolean>
+  // opts may contain { endpoint, timeoutMs }
+  async function handleSubmit(e, opts = {}) {
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
 
-    var nameEl = document.getElementById('contact-name');
-    var emailEl = document.getElementById('contact-email');
-    var messageEl = document.getElementById('contact-message');
+    const { form, nameEl, emailEl, messageEl, submitBtn } = _getFormEls();
 
-    var name = (nameEl && nameEl.value) || '';
-    var email = (emailEl && emailEl.value) || '';
-    var message = (messageEl && messageEl.value) || '';
-
-    // Basic validation
-    if (!name.trim() || !email.trim() || !message.trim()) {
-      safeToast('Please fill in all required fields.', 2200);
-      return false;
-    }
-    if (!isValidEmail(email)) {
-      safeToast('Please enter a valid email address.', 2200);
+    if (!form) {
+      _safeToast('Contact form not present', 1800);
       return false;
     }
 
-    // Construct payload
-    var payload = {
-      name: name.trim(),
-      email: email.trim(),
-      message: message.trim(),
+    // defensive reads
+    const name = _trim(nameEl && nameEl.value);
+    const email = _trim(emailEl && emailEl.value);
+    const message = _trim(messageEl && messageEl.value);
+
+    // validation
+    const invalid = [];
+    if (!name) invalid.push({ el: nameEl, reason: 'missing' });
+    if (!email) invalid.push({ el: emailEl, reason: 'missing' });
+    if (!message) invalid.push({ el: messageEl, reason: 'missing' });
+
+    if (invalid.length) {
+      _safeToast('Please fill in all required fields.', 2200);
+      invalid.forEach(x => { try { if (x.el) x.el.setAttribute('aria-invalid', 'true'); } catch (_) {} });
+      document.dispatchEvent(new CustomEvent('sti:contact:validation', { detail: { ok: false, missing: invalid.length } }));
+      return false;
+    }
+
+    if (!_isValidEmail(email)) {
+      _safeToast('Please enter a valid email address.', 2200);
+      try { if (emailEl) emailEl.setAttribute('aria-invalid', 'true'); } catch (_) {}
+      document.dispatchEvent(new CustomEvent('sti:contact:validation', { detail: { ok: false, reason: 'email' } }));
+      return false;
+    }
+
+    if (_isSubmitTooSoon()) {
+      _safeToast('Please wait a moment before sending again.', 1400);
+      return false;
+    }
+
+    const payload = {
+      name, email, message,
+      meta: { ua: (typeof navigator !== 'undefined' && navigator.userAgent) || 'unknown', page: (location && location.href) || '' },
       timestamp: new Date().toISOString()
     };
 
-    // UI: disable submit button if present
-    var form = document.getElementById('contact-form');
-    var submitBtn = form ? form.querySelector('button[type="submit"], input[type="submit"]') : null;
-    try { if (submitBtn) submitBtn.disabled = true; } catch (e) {}
-
-    // Try to send to backend; if unavailable, behave as demo-only success
-    safeToast('Sending message...', 1200);
-    var backendResp = null;
+    // disable UI
     try {
-      backendResp = await trySendToBackend(payload);
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.setAttribute('aria-busy', 'true'); }
+      form.setAttribute('aria-busy', 'true');
+    } catch (_) {}
+
+    _safeToast('Sending message...', 1200);
+    document.dispatchEvent(new CustomEvent('sti:contact:send:start', { detail: { payload } }));
+
+    // attempt backend
+    let backendResp = null;
+    try {
+      const customEndpoint = opts.endpoint || endpoint;
+      const customTimeout = (opts.timeoutMs && Number.isFinite(opts.timeoutMs)) ? opts.timeoutMs : FETCH_TIMEOUT_MS;
+      // use trySendToBackend but supply custom timeout if needed by temporarily overriding FETCH_TIMEOUT_MS
+      if (customTimeout !== FETCH_TIMEOUT_MS) {
+        const old = FETCH_TIMEOUT_MS;
+        FETCH_TIMEOUT_MS = customTimeout;
+        try { backendResp = await trySendToBackend(payload, customEndpoint); } finally { FETCH_TIMEOUT_MS = old; }
+      } else {
+        backendResp = await trySendToBackend(payload, customEndpoint);
+      }
     } catch (err) {
       backendResp = null;
     }
 
-    // Success behavior: if backend responded OK (truthy), respect it; otherwise show demo success
     if (backendResp) {
-      safeToast('Message sent. Thank you, ' + (payload.name || 'there') + '!', 2400);
-      try {
-        if (window.STI && typeof window.STI.onContactSuccess === 'function') window.STI.onContactSuccess(backendResp);
-      } catch (e) { /* ignore callback errors */ }
+      _safeToast(`Message sent. Thank you, ${payload.name || 'there'}!`, 2400);
+      document.dispatchEvent(new CustomEvent('sti:contact:send:ok', { detail: { response: backendResp } }));
+      try { if (window.STI && typeof window.STI.onContactSuccess === 'function') window.STI.onContactSuccess(backendResp); } catch (_) {}
     } else {
-      // Demo-mode: show success but do not claim persistence
-      safeToast('Thank you, ' + (payload.name || 'there') + '. Message received (demo).', 2600);
-      try {
-        if (window.STI && typeof window.STI.onContactDemo === 'function') window.STI.onContactDemo(payload);
-      } catch (e) { /* ignore */ }
+      // demo fallback
+      _safeToast(`Thank you, ${payload.name || 'there'}. Message received (demo).`, 2600);
+      document.dispatchEvent(new CustomEvent('sti:contact:send:fail', { detail: { payload } }));
+      try { if (window.STI && typeof window.STI.onContactDemo === 'function') window.STI.onContactDemo(payload); } catch (_) {}
     }
 
-    // Reset form if possible
+    // reset & re-enable UI
+    try { if (typeof form.reset === 'function') form.reset(); } catch (err) { if (console) console.warn('stiContact reset failed', err); }
     try {
-      if (form) form.reset();
-    } catch (err) {
-      if (console && console.warn) console.warn('contact form reset failed', err);
-    } finally {
-      try { if (submitBtn) submitBtn.disabled = false; } catch (e) {}
-    }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.removeAttribute('aria-busy'); }
+      form.removeAttribute('aria-busy');
+      if (nameEl) nameEl.removeAttribute('aria-invalid');
+      if (emailEl) emailEl.removeAttribute('aria-invalid');
+      if (messageEl) messageEl.removeAttribute('aria-invalid');
+    } catch (_) {}
 
     return true;
   }
 
-  // Initialize: bind handler if form exists
-  function safeInit() {
-    var form = document.getElementById('contact-form');
-    if (!form) return;
+  // ---------- Binding & initialization ----------
+  function _bindForm(form) {
+    if (!form || form.__stiBound) return;
+    form.addEventListener('submit', function (ev) {
+      const opts = (window.stiContact && window.stiContact.submitOptions) || {};
+      handleSubmit(ev, opts).catch(err => {
+        try { if (form) form.removeAttribute('aria-busy'); } catch (_) {}
+        if (console && console.warn) console.warn('stiContact.handleSubmit error', err);
+      });
+    });
 
-    if (!form.__handled) {
-      form.addEventListener('submit', handleSubmit);
-      form.__handled = true;
+    // Ctrl/Cmd+Enter in textarea -> submit
+    const messageEl = document.getElementById('contact-message');
+    if (messageEl && !messageEl.__enterBound) {
+      messageEl.addEventListener('keydown', function (ev) {
+        if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+          ev.preventDefault();
+          try { form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true })); } catch (e) {}
+        }
+      }, { passive: true });
+      messageEl.__enterBound = true;
     }
 
-    // Expose handleSubmit on API for testing or external invocation
-    api.handleSubmit = handleSubmit;
-    api.trySendToBackend = trySendToBackend;
+    form.__stiBound = true;
+  }
 
-    // Accessibility: ensure required attributes set
+  function safeInit() {
     try {
-      var nameEl = document.getElementById('contact-name');
-      var emailEl = document.getElementById('contact-email');
-      var messageEl = document.getElementById('contact-message');
-      if (nameEl) nameEl.setAttribute('required', 'required');
-      if (emailEl) emailEl.setAttribute('required', 'required');
-      if (messageEl) messageEl.setAttribute('required', 'required');
-    } catch (e) { /* ignore */ }
+      const { form, nameEl, emailEl, messageEl } = _getFormEls();
+      if (!form) {
+        document.dispatchEvent(new CustomEvent('sti:contact:ready', { detail: { present: false } }));
+        return;
+      }
+
+      // ensure required attributes for accessibility
+      try {
+        if (nameEl && !nameEl.hasAttribute('required')) nameEl.setAttribute('required', 'required');
+        if (emailEl && !emailEl.hasAttribute('required')) emailEl.setAttribute('required', 'required');
+        if (messageEl && !messageEl.hasAttribute('required')) messageEl.setAttribute('required', 'required');
+      } catch (_) {}
+
+      _bindForm(form);
+
+      // export API
+      api.handleSubmit = api.handleSubmit || handleSubmit;
+      api.trySendToBackend = api.trySendToBackend || trySendToBackend;
+      api.configure = api.configure || function (cfg) {
+        if (!cfg) return;
+        if (typeof cfg.endpoint === 'string') endpoint = cfg.endpoint;
+        if (Number.isFinite(cfg.timeoutMs)) FETCH_TIMEOUT_MS = cfg.timeoutMs;
+        if (Number.isFinite(cfg.minSubmitMs)) api._config.DEFAULT_MIN_SUBMIT_MS = cfg.minSubmitMs;
+        api._config.endpoint = endpoint;
+        api._config.FETCH_TIMEOUT_MS = FETCH_TIMEOUT_MS;
+      };
+
+      // testing hooks
+      api._setFetch = function (fn) { api._fetchOverride = fn; };
+      api._setAbortController = function (Ctor) { api._AbortControllerOverride = Ctor; };
+      api._resetOverrides = function () { delete api._fetchOverride; delete api._AbortControllerOverride; };
+
+      document.dispatchEvent(new CustomEvent('sti:contact:ready', { detail: { present: true, endpoint, FETCH_TIMEOUT_MS } }));
+    } catch (e) {
+      if (console && console.warn) console.warn('stiContact safeInit failed', e);
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -173,9 +339,11 @@
     safeInit();
   }
 
-  // Export stable API
+  // ---------- Stable exports ----------
   window.stiContact = window.stiContact || {};
   window.stiContact.handleSubmit = window.stiContact.handleSubmit || handleSubmit;
   window.stiContact.trySendToBackend = window.stiContact.trySendToBackend || trySendToBackend;
+  window.stiContact.configure = window.stiContact.configure || api.configure;
   window.stiContact.api = window.stiContact.api || api;
+
 })();

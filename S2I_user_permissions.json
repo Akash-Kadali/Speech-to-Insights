@@ -1,0 +1,28 @@
+﻿{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowReadBucketMeta",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketAcl",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketEncryption",
+        "s3:GetPublicAccessBlock"
+      ],
+      "Resource": ["arn:aws:s3:::$bucket"]
+    },
+    {
+      "Sid": "AllowPutGetDeleteObjectsInInputs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": ["arn:aws:s3:::$bucket/$prefix/*"]
+    }
+  ]
+}

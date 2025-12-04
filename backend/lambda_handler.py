@@ -18,7 +18,6 @@ Deploy handlers as:
   backend.lambda_handlers.sagemaker_transform_callback
   backend.lambda_handlers.health_handler
 """
-
 from __future__ import annotations
 
 import os
@@ -33,6 +32,7 @@ from typing import Dict, Any, Optional
 try:
     import boto3  # type: ignore
     from botocore.exceptions import ClientError  # type: ignore
+
     _BOTO3_AVAILABLE = True
 except Exception:
     boto3 = None  # type: ignore
@@ -126,7 +126,7 @@ def _upload_bytes_to_s3(data: bytes, bucket: str, key: str, content_type: Option
     extra_args = {"ContentType": content_type} if content_type else {}
     try:
         s3 = _get_s3()
-        # Use put_object for simplicity (small objects); consider multipart for large uploads
+        # Use put_object for simplicity (suitable for small files in demo)
         if extra_args:
             s3.put_object(Bucket=bucket, Key=key, Body=data, **extra_args)
         else:

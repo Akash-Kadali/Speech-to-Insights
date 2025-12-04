@@ -150,7 +150,8 @@ fi
   set -x
   cd "${SOURCE_DIR}"
   # -q: quiet, -r: recurse, -y: store symbolic links as the link
-  zip -qry "${TMP_ZIP}" .
+  # removed -y for compatibility with Git Bash zip on Windows
+  zip -qr "${TMP_ZIP}" .
   set +x
 )
 

@@ -2,53 +2,68 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Speech to Insights | Dashboard</title>
+  <title>Speech to Insights — Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Dashboard for Speech to Insights — quick overview of sessions, uploads, and system health." />
-  <meta name="author" content="Karthik (Surya Vamsi Vakada)" />
+  <meta name="author" content="Sri Akash Kadali" />
   <meta name="theme-color" content="#ffffff" />
 
-  <!-- Core styles (absolute paths from site root) -->
-  <link rel="stylesheet" href="/css/base.css" />
+  <!-- Preload critical CSS for faster first paint -->
+  <link rel="preload" href="/css/base.css" as="style">
+  <link rel="preload" href="/css/app.css" as="style">
+
+  <!-- Canonical styles (base.css holds tokens) -->
+  <link id="theme-link" rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/components.css" />
   <link rel="stylesheet" href="/css/animations.css" />
   <link rel="stylesheet" href="/css/app.css" />
+
+  <!-- OpenGraph / social -->
+  <meta property="og:title" content="Speech to Insights — Dashboard" />
+  <meta property="og:description" content="Quick snapshot of recent activity, uploads, and system status." />
+  <meta name="twitter:card" content="summary" />
 </head>
 <body>
-  <!-- Accessibility skip link -->
   <a class="skip-link" href="#main-content">Skip to main content</a>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+  <aside id="site-sidebar" class="sidebar" role="navigation" aria-label="Primary navigation">
     <div class="brand" aria-hidden="false">
       <div class="brand-mark" aria-hidden="true">STI</div>
       <div class="brand-text">
-        <h2>Dashboard</h2>
-        <p class="muted">Overview</p>
+        <h2 class="brand-heading">Dashboard</h2>
+        <p class="brand-sub muted">Overview</p>
       </div>
     </div>
 
-    <nav class="vnav" aria-label="Site links">
-      <a href="/index.html" class="active" aria-current="page">Overview</a>
-      <a href="/upload.html">Upload</a>
-      <a href="/search.html">Search</a>
-      <a href="/sessions.html">Sessions</a>
-      <a href="/analytics.html">Analytics</a>
-      <a href="/profile.html">Profile</a>
-      <a href="/admin.html">Admin</a>
-      <a href="/help.html">Help</a>
-      <a href="/about.html">About</a>
-      <a href="/contact.html">Contact</a>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-expanded="true" aria-controls="primary-nav" aria-label="Toggle navigation">Menu</button>
+
+    <nav id="primary-nav" class="vnav" aria-label="Site links" role="navigation">
+      <ul>
+        <li><a href="/index.html" class="active" aria-current="page">Overview</a></li>
+        <li><a href="/upload.html">Upload</a></li>
+        <li><a href="/search.html">Search</a></li>
+        <li><a href="/sessions.html">Sessions</a></li>
+        <li><a href="/analytics.html">Analytics</a></li>
+        <li><a href="/admin.html">Admin</a></li>
+        <li><a href="/about.html">About</a></li>
+        <li><a href="/credits.html">Credits</a></li>
+      </ul>
     </nav>
 
-    <button id="theme-toggle" class="cta-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">
-      Toggle Theme
-    </button>
+    <div class="sidebar-controls">
+      <button id="theme-toggle" class="btn btn-secondary full-width" type="button" aria-pressed="false" aria-label="Toggle theme">Toggle theme</button>
+
+      <div id="backend-status" class="backend-status" aria-live="polite" aria-atomic="true" title="Backend connection status">
+        <span class="status-dot" aria-hidden="true" data-state="unknown"></span>
+        <span class="status-label">Checking backend…</span>
+      </div>
+    </div>
   </aside>
 
-  <!-- MAIN CONTENT -->
-  <main id="main-content" class="console page-enter" role="main" aria-labelledby="dashboard-title">
-    <div class="main-inner">
+  <!-- MAIN -->
+  <main id="main-content" class="main page-enter" role="main" aria-labelledby="dashboard-title">
+    <div class="main-inner container">
       <header class="page-header">
         <h1 id="dashboard-title" class="page-title">Overview</h1>
         <p class="page-subtitle">Quick snapshot of recent activity, uploads, and system status.</p>
@@ -98,7 +113,7 @@
               <div id="upload-hint" class="muted">Accepted: .wav, .mp3 (demo only)</div>
 
               <div class="actions" style="margin-top:8px;">
-                <button id="upload-trigger" data-upload-trigger="upload-file" class="cta-primary" type="button">Upload</button>
+                <button id="upload-trigger" data-upload-trigger="upload-file" class="btn cta-primary" type="button">Upload</button>
               </div>
             </form>
           </div>
@@ -111,12 +126,16 @@
         <div class="chart-grid">
           <div class="chart-card" role="figure" aria-labelledby="sessions-chart-label">
             <h3 id="sessions-chart-label" class="chart-title">Sessions by Day</h3>
-            <canvas id="sessions-chart" width="600" height="240">Canvas not supported</canvas>
+            <div class="chart-wrap" role="img" aria-label="Sessions by day chart">
+              <canvas id="sessions-chart">Canvas not supported</canvas>
+            </div>
           </div>
 
           <div class="chart-card" role="figure" aria-labelledby="topics-chart-label">
             <h3 id="topics-chart-label" class="chart-title">Top Topics</h3>
-            <canvas id="topics-chart" width="600" height="240">Canvas not supported</canvas>
+            <div class="chart-wrap" role="img" aria-label="Top topics chart">
+              <canvas id="topics-chart">Canvas not supported</canvas>
+            </div>
           </div>
         </div>
       </section>
@@ -149,20 +168,127 @@
     </div>
   </footer>
 
-  <!-- Toast area -->
-  <div id="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
+  <!-- Toast -->
+  <div id="toast" class="toast" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-  <!-- Page scripts (deferred) -->
-  <script defer src="/js/toast.js"></script>
+  <!-- Recommended production: single bundled script. Current: core utilities + page modules. -->
   <script defer src="/js/main.js"></script>
   <script defer src="/js/admin.js"></script>
   <script defer src="/js/analytics.js"></script>
   <script defer src="/js/upload.js"></script>
   <script defer src="/js/sessions.js"></script>
 
-  <!-- Lightweight inline behavior & resilient fallbacks -->
+  <!-- Lightweight resilient bootstrap:
+       - small window.sti utils (toast, fetchJson, setTheme)
+       - sidebar & theme toggles
+       - canvas sizing for crisp charts
+       - upload fallback and KPI placeholders -->
   <script>
     (function () {
+      if (!window.sti) window.sti = {};
+      if (!window.sti.utils) {
+        window.sti.utils = {
+          toast: function (message, timeout) {
+            try {
+              var t = document.getElementById('toast');
+              if (!t) { alert(message); return; }
+              t.textContent = String(message || '');
+              t.classList.add('visible');
+              timeout = typeof timeout === 'number' ? timeout : 3000;
+              clearTimeout(t.__timer);
+              t.__timer = setTimeout(function () { t.classList.remove('visible'); }, timeout);
+            } catch (e) { try { alert(message); } catch (e2) {} }
+          },
+
+          fetchJson: function (url, opts, timeoutMs) {
+            timeoutMs = typeof timeoutMs === 'number' ? timeoutMs : 10000;
+            var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (controller) opts = Object.assign({ signal: controller.signal }, opts || {});
+            var timer = controller ? setTimeout(function () { controller.abort(); }, timeoutMs) : null;
+            return fetch(url, opts).then(function (res) {
+              if (timer) clearTimeout(timer);
+              if (!res.ok) throw new Error('Network response not ok: ' + res.status);
+              return res.json ? res.json() : res.text();
+            });
+          },
+
+          setTheme: function (href) {
+            var link = document.getElementById('theme-link');
+            if (!link) return;
+            link.setAttribute('href', href);
+            try { localStorage.setItem('sti-theme', href); } catch (e) {}
+            var btn = document.getElementById('theme-toggle');
+            if (btn) btn.setAttribute('aria-pressed', String(href.indexOf('dark') !== -1));
+          }
+        };
+      }
+
+      // restore saved theme
+      try {
+        var saved = localStorage.getItem('sti-theme');
+        if (saved) window.sti.utils.setTheme(saved);
+      } catch (e) {}
+
+      // theme toggle
+      var themeToggle = document.getElementById('theme-toggle');
+      if (themeToggle && !themeToggle.__stiAttached) {
+        themeToggle.addEventListener('click', function () {
+          var link = document.getElementById('theme-link');
+          if (!link) return;
+          var curr = link.getAttribute('href') || '/css/base.css';
+          var next = curr.indexOf('dark') !== -1 ? '/css/base.css' : '/css/theme-dark.css';
+          window.sti.utils.setTheme(next);
+        });
+        themeToggle.__stiAttached = true;
+      }
+
+      // sidebar toggle
+      var sidebarToggle = document.getElementById('sidebar-toggle');
+      var sidebar = document.getElementById('site-sidebar');
+      var primaryNav = document.getElementById('primary-nav');
+      if (sidebarToggle && sidebar && primaryNav && !sidebarToggle.__stiAttached) {
+        sidebarToggle.addEventListener('click', function () {
+          var expanded = this.getAttribute('aria-expanded') === 'true';
+          this.setAttribute('aria-expanded', String(!expanded));
+          sidebar.classList.toggle('collapsed', expanded);
+          primaryNav.hidden = expanded;
+        });
+        sidebarToggle.__stiAttached = true;
+      }
+
+      // canvas sizing helper (crisp drawing buffer)
+      function sizeCanvas(id, minW, minH) {
+        var c = document.getElementById(id);
+        if (!c) return;
+        var rect = c.getBoundingClientRect();
+        var cssW = Math.max(minW || 320, Math.round(rect.width || 640));
+        var cssH = Math.max(minH || 120, Math.round(rect.height || Math.floor(cssW * 0.4)));
+        var ratio = window.devicePixelRatio || 1;
+        c.width = Math.floor(cssW * ratio);
+        c.height = Math.floor(cssH * ratio);
+        c.style.width = cssW + 'px';
+        c.style.height = cssH + 'px';
+      }
+
+      // simple placeholder renderer for charts
+      function renderPlaceholderChart(canvas, text) {
+        if (!canvas || !canvas.getContext) return;
+        var ctx = canvas.getContext('2d');
+        var ratio = window.devicePixelRatio || 1;
+        ctx.save();
+        ctx.scale(ratio, ratio);
+        ctx.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+        ctx.font = '14px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial';
+        ctx.fillStyle = '#6b7280';
+        ctx.textAlign = 'center';
+        var cssW = parseInt(canvas.style.width, 10) || (canvas.width / ratio);
+        var cssH = parseInt(canvas.style.height, 10) || (canvas.height / ratio);
+        ctx.fillText(text, cssW / 2, cssH / 2);
+        ctx.restore();
+        canvas.__renderedPlaceholder = true;
+      }
+
+      // simple DOM helpers
       function setText(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
       function renderList(id, items) {
         var ul = document.getElementById(id); if (!ul) return;
@@ -177,80 +303,73 @@
         });
       }
 
-      function drawPlaceholder(canvasId, text) {
-        var c = document.getElementById(canvasId);
-        if (!c || !c.getContext) return;
-        var ctx = c.getContext('2d');
-        ctx.clearRect(0, 0, c.width, c.height);
-        ctx.font = '14px sans-serif';
-        ctx.fillStyle = '#666';
-        ctx.textAlign = 'center';
-        ctx.fillText(text, c.width / 2, c.height / 2);
+      // update backend status small UI
+      var statusEl = document.getElementById('backend-status');
+      function setStatus(ok, label) {
+        if (!statusEl) return;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.classList.toggle('error', !ok);
+        var dot = statusEl.querySelector('.status-dot');
+        var lbl = statusEl.querySelector('.status-label');
+        if (dot) dot.setAttribute('data-state', ok ? 'ok' : 'error');
+        if (lbl) lbl.textContent = label || (ok ? 'Backend connected' : 'Demo mode (no backend)');
       }
 
-      function ensureShowToast() {
-        if (typeof window.showToast === 'function') return;
-        window.showToast = function (message, timeout) {
-          try {
-            var t = document.getElementById('toast');
-            if (!t) { alert(message); return; }
-            t.textContent = String(message || '');
-            t.classList.add('visible');
-            timeout = typeof timeout === 'number' ? timeout : 3000;
-            setTimeout(function () { t.classList.remove('visible'); }, timeout);
-          } catch (e) { try { alert(message); } catch (_) {} }
-        };
+      // Upload handling: prefer exposed API, otherwise fallback simulate
+      function wireUpload() {
+        var uploadInput = document.getElementById('upload-file');
+        var uploadTrigger = document.getElementById('upload-trigger');
+        if (!uploadInput || !uploadTrigger || uploadTrigger.__bound) return;
+        uploadTrigger.addEventListener('click', function () {
+          if (!uploadInput.files || !uploadInput.files.length) {
+            window.sti.utils.toast('Choose a file to upload', 1800); return;
+          }
+          var file = uploadInput.files[0];
+          var uploadFn = (window.sti && window.sti.uploadFile) || (window.sti && window.sti.upload && window.sti.upload.uploadFile);
+          if (typeof uploadFn === 'function') {
+            uploadTrigger.disabled = true;
+            uploadFn(file, { startWorkflow: true }).then(function (res) {
+              uploadTrigger.disabled = false;
+              if (res && res.ok) {
+                window.sti.utils.toast('Upload succeeded', 1400);
+                try { if (window.sti && window.sti.overview && typeof window.sti.overview.refresh === 'function') window.sti.overview.refresh(); } catch (e) {}
+              } else {
+                window.sti.utils.toast('Upload failed', 3000);
+              }
+            }).catch(function () {
+              uploadTrigger.disabled = false;
+              window.sti.utils.toast('Upload error', 3000);
+            });
+            return;
+          }
+
+          // fallback simulation
+          window.sti.utils.toast('Upload (simulated) started', 1200);
+          setTimeout(function () {
+            window.sti.utils.toast('Upload (simulated) complete', 1400);
+            renderList('recent-sessions', ['demo_upload_' + new Date().toISOString() + ' — processing']);
+          }, 900);
+        }, { passive: true });
+        uploadTrigger.__bound = true;
       }
 
       function safeInit() {
-        ensureShowToast();
+        // size canvases early
+        sizeCanvas('sessions-chart', 480, 240);
+        sizeCanvas('topics-chart', 480, 240);
 
-        // Restore theme if saved
+        // quick health-check
         try {
-          var themeLink = document.getElementById('theme-link');
-          var stored = localStorage.getItem('sti-theme');
-          if (stored && themeLink) themeLink.setAttribute('href', stored);
-        } catch (e) {}
-
-        // Wire upload trigger if upload.js/main.js didn't
-        var uploadInput = document.getElementById('upload-file');
-        var uploadTrigger = document.getElementById('upload-trigger');
-        if (uploadInput && uploadTrigger && !uploadTrigger.__bound) {
-          uploadTrigger.addEventListener('click', function () {
-            if (!uploadInput.files || !uploadInput.files.length) {
-              window.showToast('Choose a file to upload', 1800); return;
-            }
-            var file = uploadInput.files[0];
-            // prefer using exposed API (main/upload modules)
-            var uploadFn = (window.sti && window.sti.uploadFile) || (window.sti && window.sti.upload && window.sti.upload.uploadFile);
-            if (typeof uploadFn === 'function') {
-              uploadTrigger.disabled = true;
-              uploadFn(file, { startWorkflow: true }).then(function (res) {
-                uploadTrigger.disabled = false;
-                if (res && res.ok) {
-                  window.showToast('Upload succeeded', 1400);
-                  // refresh recent sessions if function exists
-                  try { if (window.sti && window.sti.overview && typeof window.sti.overview.refresh === 'function') window.sti.overview.refresh(); } catch (e) {}
-                } else {
-                  window.showToast('Upload failed', 3000);
-                }
-              }).catch(function () {
-                uploadTrigger.disabled = false;
-                window.showToast('Upload error', 3000);
-              });
-              return;
-            }
-            // fallback simulation
-            window.showToast('Upload (simulated) started', 1200);
-            setTimeout(function () {
-              window.showToast('Upload (simulated) complete', 1400);
-              renderList('recent-sessions', ['demo_upload_' + new Date().toISOString() + ' — processing']);
-            }, 900);
-          }, { passive: true });
-          uploadTrigger.__bound = true;
+          window.sti.utils.fetchJson('/api/health', {}, 1500).then(function () {
+            setStatus(true, 'Backend connected');
+          }).catch(function () {
+            setStatus(false, 'Demo mode (no backend)');
+          });
+        } catch (e) {
+          setStatus(false, 'Demo mode (no backend)');
         }
 
-        // Populate KPI placeholders (replace with backend values where available)
+        // KPI placeholders (replace with real values from backend if available)
         setText('kpi-sessions', '12');
         setText('kpi-uploads', '4');
         setText('kpi-processed', '10');
@@ -263,7 +382,7 @@
           'sync_2025-11-30 — queued'
         ]);
 
-        // Queue fallback if admin didn't populate
+        // Queue fallback
         var queueList = document.getElementById('queue-list');
         if (queueList && queueList.children.length === 0) renderList('queue-list', ['meeting_2025-11-29.mp3 — queued']);
 
@@ -272,18 +391,28 @@
         setText('status-search', 'OK (demo)');
         setText('status-last', new Date().toISOString().slice(0,19).replace('T',' '));
 
-        // Placeholder charts
-        drawPlaceholder('sessions-chart', 'Sessions by day — placeholder');
-        drawPlaceholder('topics-chart', 'Top topics — placeholder');
+        // Placeholder charts (unless analytics.js draws)
+        var sessionsCanvas = document.getElementById('sessions-chart');
+        var topicsCanvas = document.getElementById('topics-chart');
+        if (sessionsCanvas && !sessionsCanvas.__renderedByAnalytics) renderPlaceholderChart(sessionsCanvas, 'Sessions by day — placeholder');
+        if (topicsCanvas && !topicsCanvas.__renderedByAnalytics) renderPlaceholderChart(topicsCanvas, 'Top topics — placeholder');
+
+        // wire upload fallback
+        wireUpload();
       }
 
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', safeInit);
       else safeInit();
+
+      // expose helpers for other module scripts
+      window.sti.setStatus = setStatus;
+      window.sti.resizeCanvas = sizeCanvas;
+      window.sti.toast = window.sti.utils.toast;
     })();
   </script>
 
   <noscript>
-    <div class="noscript-notice" role="status">JavaScript is disabled. Dashboard will display limited information.</div>
+    <div class="noscript-notice" role="status">JavaScript is disabled. Dashboard will show limited information.</div>
   </noscript>
 </body>
 </html>
